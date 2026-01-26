@@ -3,28 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // API Base URL - verwendet Umgebungsvariable oder fällt auf localhost zurück
-const getApiBaseUrl = (): string => {
-  if (typeof window === 'undefined') {
-    // Server-side: verwende localhost
-    return 'http://localhost:8787';
-  }
-  
-  // Client-side: prüfe Umgebungsvariable zuerst
-const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  
-  // In Entwicklung: IMMER localhost:8787 verwenden, unabhängig davon, wie das Frontend aufgerufen wird
-  // (auch wenn über IP-Adresse aufgerufen, sollte der Backend-Server auf localhost laufen)
-  // In Production würde man hier window.location.origin verwenden, aber für Entwicklung ist localhost sicherer
-  if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8787';
-  }
-  
-  // Für Production: verwende den gleichen Origin (nur wenn nicht in Entwicklung)
-return 'http://localhost:8787';
+const DEFAULT_LOCAL_API = "http://localhost:8787";
 
+// API Base URL - uses env var, otherwise falls back to localhost (for local dev only)
+const getApiBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+  if (envUrl && envUrl.trim().length > 0) {
+    return envUrl.replace(/\/$/, ""); // remove trailing slash
+  }
+
+  return DEFAULT_LOCAL_API;
 };
 
 type Turn = { role: "user" | "assistant"; text: string; ts: number; card_id?: string; action?: string; importance?: string };
@@ -108,7 +97,8 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
   }
   
   // Helper: Get API URL
-  const getApiUrl = useCallback(() => apiBaseUrlRef.current || 'http://localhost:8787', []);
+const getApiUrl = useCallback(() => apiBaseUrlRef.current || DEFAULT_LOCAL_API, []);
+
   
   // Helper: Load card by ID (with fallback to API if not in cards array)
   const loadCardById = useCallback(async (cardId: string) => {
