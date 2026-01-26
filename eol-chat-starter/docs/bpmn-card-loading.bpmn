@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="sample-diagram" targetNamespace="http://bpmn.io/schema/bpmn" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
+  <bpmn2:process id="CardLoadingProcess" isExecutable="false" name="Card Loading Process">
+    <bpmn2:startEvent id="StartEvent_CardLoad" name="Server Start">
+      <bpmn2:outgoing>Flow_LoadCards</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:task id="Task_ReadCardFile" name="Read cards.de.json">
+      <bpmn2:incoming>Flow_LoadCards</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_ParseCards</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_ParseSuccess" name="Parse Success?">
+      <bpmn2:incoming>Flow_ParseCards</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Success</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_Error</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_StoreCards" name="Store Cards in Memory">
+      <bpmn2:incoming>Flow_Success</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Ready</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_HandleError" name="Log Error, Set Empty Array">
+      <bpmn2:incoming>Flow_Error</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Ready2</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:endEvent id="EndEvent_CardsReady" name="Cards Ready">
+      <bpmn2:incoming>Flow_Ready</bpmn2:incoming>
+      <bpmn2:incoming>Flow_Ready2</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="Flow_LoadCards" sourceRef="StartEvent_CardLoad" targetRef="Task_ReadCardFile" />
+    <bpmn2:sequenceFlow id="Flow_ParseCards" sourceRef="Task_ReadCardFile" targetRef="Gateway_ParseSuccess" />
+    <bpmn2:sequenceFlow id="Flow_Success" name="Yes" sourceRef="Gateway_ParseSuccess" targetRef="Task_StoreCards" />
+    <bpmn2:sequenceFlow id="Flow_Error" name="No" sourceRef="Gateway_ParseSuccess" targetRef="Task_HandleError" />
+    <bpmn2:sequenceFlow id="Flow_Ready" sourceRef="Task_StoreCards" targetRef="EndEvent_CardsReady" />
+    <bpmn2:sequenceFlow id="Flow_Ready2" sourceRef="Task_HandleError" targetRef="EndEvent_CardsReady" />
+  </bpmn2:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1" name="Card Loading Diagram">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="CardLoadingProcess">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_CardLoad">
+        <dc:Bounds x="179" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="160" y="142" width="75" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_1" bpmnElement="Task_ReadCardFile">
+        <dc:Bounds x="270" y="77" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_1" bpmnElement="Gateway_ParseSuccess" isMarkerVisible="true">
+        <dc:Bounds x="425" y="92" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="420" y="65" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_2" bpmnElement="Task_StoreCards">
+        <dc:Bounds x="530" y="77" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_3" bpmnElement="Task_HandleError">
+        <dc:Bounds x="530" y="200" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_EndEvent_2" bpmnElement="EndEvent_CardsReady">
+        <dc:Bounds x="692" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="680" y="142" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_LoadCards_di" bpmnElement="Flow_LoadCards">
+        <di:waypoint x="215" y="117" />
+        <di:waypoint x="270" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ParseCards_di" bpmnElement="Flow_ParseCards">
+        <di:waypoint x="370" y="117" />
+        <di:waypoint x="425" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Success_di" bpmnElement="Flow_Success">
+        <di:waypoint x="450" y="117" />
+        <di:waypoint x="530" y="117" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="480" y="99" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Error_di" bpmnElement="Flow_Error">
+        <di:waypoint x="450" y="142" />
+        <di:waypoint x="450" y="240" />
+        <di:waypoint x="530" y="240" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="480" y="190" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Ready_di" bpmnElement="Flow_Ready">
+        <di:waypoint x="630" y="117" />
+        <di:waypoint x="692" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Ready2_di" bpmnElement="Flow_Ready2">
+        <di:waypoint x="630" y="240" />
+        <di:waypoint x="728" y="240" />
+        <di:waypoint x="728" y="135" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn2:definitions>

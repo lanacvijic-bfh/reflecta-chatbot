@@ -1,0 +1,462 @@
+[
+  {
+    "id": "illness_care_01",
+    "topic": "illness_care",
+    "prompt": "Genügend Informationen über meine Krankheit haben",
+    "hints": [
+      "Mit Arzt/Ärztin sprechen und Quellen prüfen",
+      "Eigene Fragen notieren"
+    ],
+    "tags": [
+      "Information",
+      "Krankheit"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_02",
+    "topic": "illness_care",
+    "prompt": "Vorsorgen für den Fall, dass ich meine Entscheidungsfähigkeit verliere",
+    "hints": [
+      "Vertretungsberechtigte Person benennen",
+      "Patientenverfügung verfassen"
+    ],
+    "tags": [
+      "Vorsorge",
+      "Vertretung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_03",
+    "topic": "illness_care",
+    "prompt": "Eine Bezugsperson in der Pflege haben, der ich vertraue",
+    "hints": [
+      "Beziehung zu Bezugspflegeperson stärken",
+      "Team und Umfeld informieren"
+    ],
+    "tags": [
+      "Bezugsperson",
+      "Pflege"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_04",
+    "topic": "illness_care",
+    "prompt": "Sicherstellen, dass meine Entscheidungen bezüglich der medizinischen Versorgung vom Behandlungsteam respektiert werden",
+    "hints": [
+      "Vertretungsberechtigte Person bestimmen",
+      "Wünsche erklären und dokumentieren"
+    ],
+    "tags": [
+      "Respekt",
+      "Behandlungsteam"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_05",
+    "topic": "illness_care",
+    "prompt": "Meinen Wunsch nach einem Behandlungsort im Krankheitsfall äussern",
+    "hints": [
+      "Zu Hause, Pflegeinstitution, Spital, Palliativstation",
+      "In Patientenverfügung festhalten"
+    ],
+    "tags": [
+      "Ort",
+      "Behandlung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_06",
+    "topic": "illness_care",
+    "prompt": "Alles tun, um meine Krankheit „loszuwerden“",
+    "hints": [
+      "Behandlungsoptionen mit Team abwägen",
+      "Mit Angehörigen besprechen"
+    ],
+    "tags": [
+      "Heilung",
+      "Therapien"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_07",
+    "topic": "illness_care",
+    "prompt": "Im Alltag einen guten Umgang mit meiner Krankheit finden",
+    "hints": [
+      "Ressourcen/Strategien besprechen",
+      "Mit Angehörigen Lösungen suchen"
+    ],
+    "tags": [
+      "Coping",
+      "Alltag"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "illness_care_08",
+    "topic": "illness_care",
+    "prompt": "Meine Ängste im Zusammenhang mit körperlichen Schmerzen oder anderen Formen des Leidens ausdrücken können",
+    "hints": [
+      "Angst vor Schmerz/psychischem Leiden benennen",
+      "In Patientenverfügung beschreiben"
+    ],
+    "tags": [
+      "Schmerz",
+      "Leiden",
+      "Ängste"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_01",
+    "topic": "practical",
+    "prompt": "Sicherstellen, dass die täglichen Aufgaben gemeistert werden",
+    "hints": [
+      "Vertrauensperson bestimmen",
+      "Aufgaben klären (Post, Pflanzen usw.)"
+    ],
+    "tags": [
+      "Alltag",
+      "Organisation"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_02",
+    "topic": "practical",
+    "prompt": "Das Wohlbefinden und die Betreuung meiner kleinen Kinder sicherstellen",
+    "hints": [
+      "Betreuungspersonen anfragen",
+      "Sozialdienste kontaktieren"
+    ],
+    "tags": [
+      "Kinder",
+      "Betreuung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_03",
+    "topic": "practical",
+    "prompt": "Meine Tiere gut versorgt wissen",
+    "hints": [
+      "Nachfolge/Betreuung klären",
+      "Netzwerke recherchieren"
+    ],
+    "tags": [
+      "Tiere",
+      "Betreuung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_04",
+    "topic": "practical",
+    "prompt": "Meinen digitalen Nachlass verwalten",
+    "hints": [
+      "Bestandsaufnahme der Konten/Daten",
+      "Vollmachten/Vorsorge für Zugänge"
+    ],
+    "tags": [
+      "Digital",
+      "Nachlass"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_05",
+    "topic": "practical",
+    "prompt": "Sicherstellen, dass meine finanziellen und administrativen Angelegenheiten abgewickelt werden",
+    "hints": [
+      "Bestandsaufnahme Finanzen/Administration",
+      "Vollmachten oder Vorsorgeauftrag"
+    ],
+    "tags": [
+      "Finanzen",
+      "Administration",
+      "Vorsorgeauftrag"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_06",
+    "topic": "practical",
+    "prompt": "Einen oder mehrere Lebensentwürfe würdigen",
+    "hints": [
+      "Ressourcen & Fähigkeiten prüfen",
+      "Mit Umfeld/Team sprechen"
+    ],
+    "tags": [
+      "Lebensentwurf",
+      "Wünsche"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_07",
+    "topic": "practical",
+    "prompt": "Erfahrungen und Wissenswertes weiter geben",
+    "hints": [
+      "Festlegen, was vermittelt werden soll",
+      "Medium wählen (schreiben, erzählen)"
+    ],
+    "tags": [
+      "Vermächtnis",
+      "Wissen"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_08",
+    "topic": "practical",
+    "prompt": "Mein Testament erstellen",
+    "hints": [
+      "Testament erstellen & hinterlegen",
+      "Angehörige informieren"
+    ],
+    "tags": [
+      "Testament",
+      "Erbe"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_09",
+    "topic": "practical",
+    "prompt": "Jemandem etwas vorab übergeben, ohne lange zu warten",
+    "hints": [
+      "Gegenstände mit emotionalem Wert spenden/übergeben"
+    ],
+    "tags": [
+      "Schenkung",
+      "Erinnerung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_10",
+    "topic": "practical",
+    "prompt": "Umgang mit meinen Organen und mit meinen biologischen und medizinischen Daten festlegen",
+    "hints": [
+      "Organspende-Entscheidung treffen",
+      "Infos bei Swisstransplant einholen"
+    ],
+    "tags": [
+      "Organspende",
+      "Daten/Proben"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "practical_11",
+    "topic": "practical",
+    "prompt": "Meine Beerdigung gestalten",
+    "hints": [
+      "Form & Zeremonie festlegen",
+      "Mit Umfeld besprechen/organisieren"
+    ],
+    "tags": [
+      "Beerdigung",
+      "Rituale"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_01",
+    "topic": "dignity",
+    "prompt": "Sicherstellen, dass mein Geschmack und meine Vorlieben im Alltag am Ort meiner Pflege respektiert werden",
+    "hints": [
+      "Liste mit wichtigen Vorlieben erstellen",
+      "Mit Team/Angehörigen teilen"
+    ],
+    "tags": [
+      "Vorlieben",
+      "Pflegeort"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_02",
+    "topic": "dignity",
+    "prompt": "Informieren darüber, was ich nicht ertragen würde oder welche Grenzen nicht überschritten werden dürfen",
+    "hints": [
+      "Unerträgliches klar benennen",
+      "In Patientenverfügung festhalten"
+    ],
+    "tags": [
+      "Grenzen",
+      "Nicht-Erträgliches"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_03",
+    "topic": "dignity",
+    "prompt": "Mein Aussehen bewahren",
+    "hints": [
+      "Wünsche zu Kleidung/Frisur/Make-up mitteilen"
+    ],
+    "tags": [
+      "Aussehen",
+      "Würde"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_04",
+    "topic": "dignity",
+    "prompt": "Die Belastungen für meine Angehörigen verringern",
+    "hints": [
+      "Umgebung/Organisation anpassen",
+      "Aufgaben verteilen"
+    ],
+    "tags": [
+      "Entlastung",
+      "Familie"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_05",
+    "topic": "dignity",
+    "prompt": "Mit meinen spirituellen oder religiösen Überzeugungen harmonisch umgehen und mich respektiert fühlen",
+    "hints": [
+      "Religiöse/spirituelle Begleitung anfragen",
+      "Rituale besprechen"
+    ],
+    "tags": [
+      "Spiritualität",
+      "Religion"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_06",
+    "topic": "dignity",
+    "prompt": "Eine Aktivität oder ein Hobby aufrechterhalten, das mir Lebensfreude verleiht",
+    "hints": [
+      "Aktivitäten identifizieren & sichern",
+      "Mit Umfeld/Team abstimmen"
+    ],
+    "tags": [
+      "Aktivität",
+      "Lebensfreude"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "dignity_07",
+    "topic": "dignity",
+    "prompt": "In guter Erinnerung bleiben",
+    "hints": [
+      "Bewusst gestalten, was bleiben soll",
+      "Mit Verwandten besprechen"
+    ],
+    "tags": [
+      "Erinnerung",
+      "Vermächtnis"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_01",
+    "topic": "feelings",
+    "prompt": "Meine Beziehung zu meinen Angehörigen aufrechterhalten",
+    "hints": [
+      "Wege zur Pflege der Beziehungen planen",
+      "Mit Angehörigen besprechen"
+    ],
+    "tags": [
+      "Angehörige",
+      "Beziehungen"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_02",
+    "topic": "feelings",
+    "prompt": "Erfahrungen austauschen mit Menschen die die gleiche Krankheit hatten oder durchmachen wie ich",
+    "hints": [
+      "Kontakt zu Selbsthilfegruppen/Patientenorganisationen",
+      "Wunsch dem Team mitteilen"
+    ],
+    "tags": [
+      "Peers",
+      "Austausch"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_03",
+    "topic": "feelings",
+    "prompt": "Liebevolle oder fürsorgliche Gesten oder Berührungen erhalten",
+    "hints": [
+      "Erwartungen klären & kommunizieren",
+      "Team/Angehörige informieren"
+    ],
+    "tags": [
+      "Nähe",
+      "Zuwendung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_04",
+    "topic": "feelings",
+    "prompt": "Sexualität beibehalten",
+    "hints": [
+      "Mit Partner:in oder Team besprechen"
+    ],
+    "tags": [
+      "Intimität",
+      "Sexualität"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_05",
+    "topic": "feelings",
+    "prompt": "Einen Konflikt lösen",
+    "hints": [
+      "Gespräch suchen oder Brief hinterlassen"
+    ],
+    "tags": [
+      "Konflikt",
+      "Versöhnung"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_06",
+    "topic": "feelings",
+    "prompt": "Abschied nehmen",
+    "hints": [
+      "Form des Abschieds planen & mitteilen",
+      "Schriftlichen Abschied vorbereiten"
+    ],
+    "tags": [
+      "Abschied",
+      "Rituale"
+    ],
+    "language": "de"
+  },
+  {
+    "id": "feelings_07",
+    "topic": "feelings",
+    "prompt": "Allein oder nicht allein sterben",
+    "hints": [
+      "Wunsch klären & festhalten",
+      "Mit Team/Angehörigen besprechen"
+    ],
+    "tags": [
+      "Begleitung",
+      "letzte Phase"
+    ],
+    "language": "de"
+  }
+]

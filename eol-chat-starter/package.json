@@ -1,0 +1,31 @@
+{
+  "name": "eol-chat-starter",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run dev",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,yellow\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "node Backend/server.mjs",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "install:all": "npm install && cd Backend && npm install && cd ../frontend && npm install && cd ..",
+    "build": "cd frontend && npm run build",
+    "build:start": "npm run build && npm run start:prod",
+    "start:prod": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,yellow\" \"npm run dev:backend\" \"npm run start:frontend\"",
+    "start:frontend": "npm run start --prefix frontend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "openai": "^6.9.1",
+    "pdfkit": "^0.17.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

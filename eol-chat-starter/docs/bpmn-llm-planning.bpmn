@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_LLM" targetNamespace="http://bpmn.io/schema/bpmn" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
+  <bpmn2:process id="LLMPlanningProcess" isExecutable="false" name="LLM Planning Process">
+    <bpmn2:startEvent id="StartEvent_PlanRequest" name="POST /api/plan">
+      <bpmn2:outgoing>Flow_CheckEmptyTurns</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:exclusiveGateway id="Gateway_EmptyTurns" name="Turns Empty?">
+      <bpmn2:incoming>Flow_CheckEmptyTurns</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Welcome</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_CheckEmptyInput</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_Welcome" name="Return Welcome Message">
+      <bpmn2:incoming>Flow_Welcome</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_End</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_EmptyInput" name="Input Empty?">
+      <bpmn2:incoming>Flow_CheckEmptyInput</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_EmptyGuidance</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_CheckUserQuestion</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_EmptyGuidance" name="Return Empty Input Guidance">
+      <bpmn2:incoming>Flow_EmptyGuidance</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_End3</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_CheckUserQuestion" name="Check if User Asking Question">
+      <bpmn2:incoming>Flow_CheckUserQuestion</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_HasQuestion</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_HasQuestion" name="User Question?">
+      <bpmn2:incoming>Flow_HasQuestion</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_ExplainCurrentCard</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_DetectTopic</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_ExplainCurrentCard" name="Explain Current Card (No Next Card)">
+      <bpmn2:incoming>Flow_ExplainCurrentCard</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_End4</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_DetectTopic" name="Detect Topic from User Message">
+      <bpmn2:incoming>Flow_DetectTopic</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_CheckTopic</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_TopicDetected" name="Topic Detected?">
+      <bpmn2:incoming>Flow_CheckTopic</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_CheckUnasked</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_BuildContext</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_FindUnaskedCard" name="Find First Unasked Card">
+      <bpmn2:incoming>Flow_CheckUnasked</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_HasUnasked</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_HasUnasked" name="Unasked Card Found?">
+      <bpmn2:incoming>Flow_HasUnasked</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_EarlyReturn</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_BuildContext2</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_EarlyReturn" name="Return Card (Early Return)">
+      <bpmn2:incoming>Flow_EarlyReturn</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_End2</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_BuildContext" name="Build User Context">
+      <bpmn2:incoming>Flow_BuildContext</bpmn2:incoming>
+      <bpmn2:incoming>Flow_BuildContext2</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_CallLLM</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_CallLLM" name="Call Azure OpenAI / OpenAI API">
+      <bpmn2:incoming>Flow_CallLLM</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_ParseResponse</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_ParseResponse" name="Parse JSON Response">
+      <bpmn2:incoming>Flow_ParseResponse</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Validate</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:task id="Task_ValidateAction" name="Validate and Fix Action">
+      <bpmn2:incoming>Flow_Validate</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_CheckVeryImportant</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_VeryImportant" name="Very Important Card?">
+      <bpmn2:incoming>Flow_CheckVeryImportant</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_FollowUp</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_CheckAutoShow</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_AddFollowUp" name="Add Follow-up Question">
+      <bpmn2:incoming>Flow_FollowUp</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_FollowUpDone</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:exclusiveGateway id="Gateway_AutoShow" name="Set Auto Show Card?">
+      <bpmn2:incoming>Flow_CheckAutoShow</bpmn2:incoming>
+      <bpmn2:incoming>Flow_FollowUpDone</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_SetAutoShow</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_Response</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:task id="Task_SetAutoShow" name="Set auto_show_card Flag">
+      <bpmn2:incoming>Flow_SetAutoShow</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_Response2</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:endEvent id="EndEvent_Response" name="Return Response">
+      <bpmn2:incoming>Flow_Response</bpmn2:incoming>
+      <bpmn2:incoming>Flow_Response2</bpmn2:incoming>
+      <bpmn2:incoming>Flow_End</bpmn2:incoming>
+      <bpmn2:incoming>Flow_End2</bpmn2:incoming>
+      <bpmn2:incoming>Flow_End3</bpmn2:incoming>
+      <bpmn2:incoming>Flow_End4</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="Flow_CheckEmptyTurns" sourceRef="StartEvent_PlanRequest" targetRef="Gateway_EmptyTurns" />
+    <bpmn2:sequenceFlow id="Flow_Welcome" name="Yes" sourceRef="Gateway_EmptyTurns" targetRef="Task_Welcome" />
+    <bpmn2:sequenceFlow id="Flow_CheckEmptyInput" name="No" sourceRef="Gateway_EmptyTurns" targetRef="Gateway_EmptyInput" />
+    <bpmn2:sequenceFlow id="Flow_EmptyGuidance" name="Yes" sourceRef="Gateway_EmptyInput" targetRef="Task_EmptyGuidance" />
+    <bpmn2:sequenceFlow id="Flow_CheckUserQuestion" name="No" sourceRef="Gateway_EmptyInput" targetRef="Task_CheckUserQuestion" />
+    <bpmn2:sequenceFlow id="Flow_HasQuestion" sourceRef="Task_CheckUserQuestion" targetRef="Gateway_HasQuestion" />
+    <bpmn2:sequenceFlow id="Flow_ExplainCurrentCard" name="Yes" sourceRef="Gateway_HasQuestion" targetRef="Task_ExplainCurrentCard" />
+    <bpmn2:sequenceFlow id="Flow_DetectTopic" name="No" sourceRef="Gateway_HasQuestion" targetRef="Task_DetectTopic" />
+    <bpmn2:sequenceFlow id="Flow_CheckTopic" sourceRef="Task_DetectTopic" targetRef="Gateway_TopicDetected" />
+    <bpmn2:sequenceFlow id="Flow_CheckUnasked" name="Yes" sourceRef="Gateway_TopicDetected" targetRef="Task_FindUnaskedCard" />
+    <bpmn2:sequenceFlow id="Flow_BuildContext" name="No" sourceRef="Gateway_TopicDetected" targetRef="Task_BuildContext" />
+    <bpmn2:sequenceFlow id="Flow_HasUnasked" sourceRef="Task_FindUnaskedCard" targetRef="Gateway_HasUnasked" />
+    <bpmn2:sequenceFlow id="Flow_EarlyReturn" name="Yes" sourceRef="Gateway_HasUnasked" targetRef="Task_EarlyReturn" />
+    <bpmn2:sequenceFlow id="Flow_BuildContext2" name="No" sourceRef="Gateway_HasUnasked" targetRef="Task_BuildContext" />
+    <bpmn2:sequenceFlow id="Flow_CallLLM" sourceRef="Task_BuildContext" targetRef="Task_CallLLM" />
+    <bpmn2:sequenceFlow id="Flow_ParseResponse" sourceRef="Task_CallLLM" targetRef="Task_ParseResponse" />
+    <bpmn2:sequenceFlow id="Flow_Validate" sourceRef="Task_ParseResponse" targetRef="Task_ValidateAction" />
+    <bpmn2:sequenceFlow id="Flow_CheckVeryImportant" sourceRef="Task_ValidateAction" targetRef="Gateway_VeryImportant" />
+    <bpmn2:sequenceFlow id="Flow_FollowUp" name="Yes" sourceRef="Gateway_VeryImportant" targetRef="Task_AddFollowUp" />
+    <bpmn2:sequenceFlow id="Flow_CheckAutoShow" name="No" sourceRef="Gateway_VeryImportant" targetRef="Gateway_AutoShow" />
+    <bpmn2:sequenceFlow id="Flow_FollowUpDone" sourceRef="Task_AddFollowUp" targetRef="Gateway_AutoShow" />
+    <bpmn2:sequenceFlow id="Flow_SetAutoShow" name="Yes" sourceRef="Gateway_AutoShow" targetRef="Task_SetAutoShow" />
+    <bpmn2:sequenceFlow id="Flow_Response" name="No" sourceRef="Gateway_AutoShow" targetRef="EndEvent_Response" />
+    <bpmn2:sequenceFlow id="Flow_Response2" sourceRef="Task_SetAutoShow" targetRef="EndEvent_Response" />
+    <bpmn2:sequenceFlow id="Flow_End" sourceRef="Task_Welcome" targetRef="EndEvent_Response" />
+    <bpmn2:sequenceFlow id="Flow_End2" sourceRef="Task_EarlyReturn" targetRef="EndEvent_Response" />
+    <bpmn2:sequenceFlow id="Flow_End3" sourceRef="Task_EmptyGuidance" targetRef="EndEvent_Response" />
+    <bpmn2:sequenceFlow id="Flow_End4" sourceRef="Task_ExplainCurrentCard" targetRef="EndEvent_Response" />
+  </bpmn2:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_LLM" name="LLM Planning Diagram">
+    <bpmndi:BPMNPlane id="BPMNPlane_LLM" bpmnElement="LLMPlanningProcess">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_1" bpmnElement="StartEvent_PlanRequest">
+        <dc:Bounds x="179" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="152" y="142" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_1" bpmnElement="Gateway_EmptyTurns" isMarkerVisible="true">
+        <dc:Bounds x="270" y="84" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="265" y="60" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_1" bpmnElement="Task_Welcome">
+        <dc:Bounds x="375" y="77" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_2" bpmnElement="Gateway_EmptyInput" isMarkerVisible="true">
+        <dc:Bounds x="375" y="200" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="370" y="173" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_2" bpmnElement="Task_EmptyGuidance">
+        <dc:Bounds x="480" y="193" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_3" bpmnElement="Task_CheckUserQuestion">
+        <dc:Bounds x="480" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_3" bpmnElement="Gateway_HasQuestion" isMarkerVisible="true">
+        <dc:Bounds x="635" y="337" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="630" y="310" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_4" bpmnElement="Task_ExplainCurrentCard">
+        <dc:Bounds x="740" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_5" bpmnElement="Task_DetectTopic">
+        <dc:Bounds x="635" y="470" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_4" bpmnElement="Gateway_TopicDetected" isMarkerVisible="true">
+        <dc:Bounds x="790" y="487" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="785" y="460" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_6" bpmnElement="Task_FindUnaskedCard">
+        <dc:Bounds x="895" y="470" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_5" bpmnElement="Gateway_HasUnasked" isMarkerVisible="true">
+        <dc:Bounds x="1050" y="487" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1045" y="460" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_7" bpmnElement="Task_EarlyReturn">
+        <dc:Bounds x="1155" y="470" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_8" bpmnElement="Task_BuildContext">
+        <dc:Bounds x="895" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_9" bpmnElement="Task_CallLLM">
+        <dc:Bounds x="1050" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_10" bpmnElement="Task_ParseResponse">
+        <dc:Bounds x="1205" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_11" bpmnElement="Task_ValidateAction">
+        <dc:Bounds x="1360" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_6" bpmnElement="Gateway_VeryImportant" isMarkerVisible="true">
+        <dc:Bounds x="1515" y="637" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1500" y="610" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_12" bpmnElement="Task_AddFollowUp">
+        <dc:Bounds x="1620" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Gateway_7" bpmnElement="Gateway_AutoShow" isMarkerVisible="true">
+        <dc:Bounds x="1775" y="637" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1760" y="610" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_Task_13" bpmnElement="Task_SetAutoShow">
+        <dc:Bounds x="1880" y="620" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="_BPMNShape_EndEvent_1" bpmnElement="EndEvent_Response">
+        <dc:Bounds x="2035" y="632" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2020" y="675" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_CheckEmptyTurns_di" bpmnElement="Flow_CheckEmptyTurns">
+        <di:waypoint x="215" y="117" />
+        <di:waypoint x="270" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Welcome_di" bpmnElement="Flow_Welcome">
+        <di:waypoint x="295" y="117" />
+        <di:waypoint x="375" y="117" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="320" y="99" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckEmptyInput_di" bpmnElement="Flow_CheckEmptyInput">
+        <di:waypoint x="295" y="134" />
+        <di:waypoint x="295" y="225" />
+        <di:waypoint x="375" y="225" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="300" y="175" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_EmptyGuidance_di" bpmnElement="Flow_EmptyGuidance">
+        <di:waypoint x="400" y="225" />
+        <di:waypoint x="480" y="233" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="425" y="215" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckUserQuestion_di" bpmnElement="Flow_CheckUserQuestion">
+        <di:waypoint x="400" y="250" />
+        <di:waypoint x="400" y="360" />
+        <di:waypoint x="480" y="360" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="405" y="305" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HasQuestion_di" bpmnElement="Flow_HasQuestion">
+        <di:waypoint x="580" y="360" />
+        <di:waypoint x="635" y="362" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ExplainCurrentCard_di" bpmnElement="Flow_ExplainCurrentCard">
+        <di:waypoint x="660" y="362" />
+        <di:waypoint x="740" y="360" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="685" y="342" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DetectTopic_di" bpmnElement="Flow_DetectTopic">
+        <di:waypoint x="660" y="387" />
+        <di:waypoint x="660" y="510" />
+        <di:waypoint x="635" y="510" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="665" y="445" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckTopic_di" bpmnElement="Flow_CheckTopic">
+        <di:waypoint x="735" y="510" />
+        <di:waypoint x="790" y="512" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckUnasked_di" bpmnElement="Flow_CheckUnasked">
+        <di:waypoint x="815" y="512" />
+        <di:waypoint x="895" y="510" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="840" y="492" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_BuildContext_di" bpmnElement="Flow_BuildContext">
+        <di:waypoint x="815" y="537" />
+        <di:waypoint x="815" y="660" />
+        <di:waypoint x="895" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="820" y="595" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HasUnasked_di" bpmnElement="Flow_HasUnasked">
+        <di:waypoint x="995" y="510" />
+        <di:waypoint x="1050" y="512" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_EarlyReturn_di" bpmnElement="Flow_EarlyReturn">
+        <di:waypoint x="1075" y="512" />
+        <di:waypoint x="1155" y="510" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1100" y="492" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_BuildContext2_di" bpmnElement="Flow_BuildContext2">
+        <di:waypoint x="1075" y="537" />
+        <di:waypoint x="1075" y="660" />
+        <di:waypoint x="895" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1080" y="595" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CallLLM_di" bpmnElement="Flow_CallLLM">
+        <di:waypoint x="995" y="660" />
+        <di:waypoint x="1050" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ParseResponse_di" bpmnElement="Flow_ParseResponse">
+        <di:waypoint x="1150" y="660" />
+        <di:waypoint x="1205" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Validate_di" bpmnElement="Flow_Validate">
+        <di:waypoint x="1305" y="660" />
+        <di:waypoint x="1360" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckVeryImportant_di" bpmnElement="Flow_CheckVeryImportant">
+        <di:waypoint x="1460" y="660" />
+        <di:waypoint x="1515" y="662" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FollowUp_di" bpmnElement="Flow_FollowUp">
+        <di:waypoint x="1540" y="662" />
+        <di:waypoint x="1620" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1555" y="642" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CheckAutoShow_di" bpmnElement="Flow_CheckAutoShow">
+        <di:waypoint x="1540" y="687" />
+        <di:waypoint x="1540" y="770" />
+        <di:waypoint x="1800" y="770" />
+        <di:waypoint x="1800" y="687" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1555" y="750" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FollowUpDone_di" bpmnElement="Flow_FollowUpDone">
+        <di:waypoint x="1720" y="660" />
+        <di:waypoint x="1775" y="662" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SetAutoShow_di" bpmnElement="Flow_SetAutoShow">
+        <di:waypoint x="1800" y="662" />
+        <di:waypoint x="1880" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1830" y="642" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Response_di" bpmnElement="Flow_Response">
+        <di:waypoint x="1800" y="687" />
+        <di:waypoint x="2053" y="668" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1910" y="675" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Response2_di" bpmnElement="Flow_Response2">
+        <di:waypoint x="1980" y="660" />
+        <di:waypoint x="2035" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_End_di" bpmnElement="Flow_End">
+        <di:waypoint x="475" y="117" />
+        <di:waypoint x="2053" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_End2_di" bpmnElement="Flow_End2">
+        <di:waypoint x="1255" y="510" />
+        <di:waypoint x="2053" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_End3_di" bpmnElement="Flow_End3">
+        <di:waypoint x="580" y="233" />
+        <di:waypoint x="2053" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_End4_di" bpmnElement="Flow_End4">
+        <di:waypoint x="840" y="360" />
+        <di:waypoint x="2053" y="650" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn2:definitions>

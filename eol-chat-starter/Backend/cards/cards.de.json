@@ -1,0 +1,402 @@
+[
+    {
+      "id": "illness_1",
+      "topic": "illness_care",
+      "order": 1,
+      "title": "Genügend Informationen über meine Krankheit haben",
+      "prompt": "Wie wichtig ist es Ihnen, gut verständliche Informationen über Ihre Krankheit und die Behandlung zu bekommen?",
+      "description": "Für viele Menschen ist es wichtig, ihre Krankheit und die möglichen Behandlungen gut zu verstehen. Klarheit über Diagnose, Verlauf und Optionen kann helfen, Entscheidungen mitzutragen und Unsicherheiten zu verringern.",
+      "example_actions": [
+        "Mit der behandelnden Ärztin oder dem Arzt ein Gespräch vereinbaren, um gezielt Fragen zu stellen und Informationsquellen zu klären.",
+        "Verlässliche Informationsmaterialien sammeln und sie mit einer vertrauten Person durchgehen."
+      ]
+    },
+    {
+      "id": "illness_2",
+      "topic": "illness_care",
+      "order": 2,
+      "title": "Vorsorgen für den Fall, dass ich meine Entscheidungsfähigkeit verliere",
+      "prompt": "Wie wichtig ist es Ihnen, vorzusorgen, falls Sie Ihre Entscheidungsfähigkeit einmal verlieren?",
+      "description": "Es kann vorkommen, dass man vorübergehend oder dauerhaft nicht mehr selbst entscheiden kann – zum Beispiel nach einem Unfall oder durch eine schwere körperliche oder psychische Erkrankung. Vorsorge bedeutet, rechtzeitig festzuhalten, welche Behandlungen man wünschen oder ablehnen würde.",
+      "example_actions": [
+        "Mit Angehörigen und Behandlungsteam darüber sprechen, was im Fall einer fehlenden Entscheidungsfähigkeit wichtig wäre.",
+        "Eine Patientenverfügung verfassen und aufbewahren, wo sie im Notfall gefunden wird."
+      ]
+    },
+    {
+      "id": "illness_3",
+      "topic": "illness_care",
+      "order": 3,
+      "title": "Eine Bezugsperson in der Pflege haben, der ich vertraue",
+      "prompt": "Wie wichtig ist es Ihnen, eine vertraute Bezugsperson im Behandlungsteam zu haben?",
+      "description": "Eine feste Bezugsperson im Behandlungsteam kann Ihre Haltung und Werte besonders gut kennen und bei Entscheidungen mit vertreten. Diese Person kann eine Pflegefachperson, Ärztin, Therapeut oder jemand anderes aus dem Team sein.",
+      "example_actions": [
+        "Mit dem Behandlungsteam klären, wer als Bezugsperson fungieren kann.",
+        "Diese Person gezielt über die eigenen Werte, Wünsche und Grenzen informieren."
+      ]
+    },
+    {
+      "id": "illness_4",
+      "topic": "illness_care",
+      "order": 4,
+      "title": "Sicherstellen, dass meine Entscheidungen bezüglich der medizinischen Versorgung vom Behandlungsteam respektiert werden",
+      "prompt": "Wie wichtig ist es Ihnen, dass das Behandlungsteam Ihre Entscheidungen wirklich respektiert?",
+      "description": "Damit eigene Entscheidungen ernst genommen und umgesetzt werden, kann es hilfreich sein, eine vertretungsberechtigte Person zu bestimmen. Diese kann Sie vertreten, wenn Sie geschwächt sind oder sich nicht mehr äussern können.",
+      "example_actions": [
+        "Eine vertretungsberechtigte Person auswählen und fragen, ob sie diese Rolle übernehmen möchte.",
+        "Die eigenen Wünsche schriftlich festhalten, zum Beispiel in einer Patientenverfügung, und sowohl der Vertretung als auch dem Behandlungsteam erklären."
+      ]
+    },
+    {
+      "id": "illness_5",
+      "topic": "illness_care",
+      "order": 5,
+      "title": "Meinen Wunsch nach einem Behandlungsort im Krankheitsfall äussern",
+      "prompt": "Wie wichtig ist es Ihnen, den bevorzugten Ort der Behandlung oder Pflege festzulegen?",
+      "description": "Manche Menschen möchten möglichst zu Hause versorgt werden, andere fühlen sich in einem Spital, einer Pflegeeinrichtung oder auf einer Palliativstation besser aufgehoben. Es kann entlastend sein, diese Wünsche frühzeitig mitzuteilen.",
+      "example_actions": [
+        "Mit Angehörigen, der vertretungsberechtigten Person und dem Behandlungsteam über bevorzugte Pflegeorte sprechen.",
+        "Diese Wünsche in einer Patientenverfügung oder einem anderen Dokument festhalten."
+      ]
+    },
+    {
+      "id": "illness_6",
+      "topic": "illness_care",
+      "order": 6,
+      "title": "Alles tun, um meine Krankheit «loszuwerden»",
+      "prompt": "Wie wichtig ist es Ihnen, alle möglichen Behandlungen auszuschöpfen, um die Krankheit zu bekämpfen?",
+      "description": "Für manche steht im Vordergrund, die Krankheit möglichst ganz zu besiegen, auch wenn Behandlungen belastend sein können. Es kann helfen, gemeinsam abzuwägen, welche Chancen und Risiken für Sie akzeptabel sind.",
+      "example_actions": [
+        "Mit dem Behandlungsteam die verfügbaren Therapien, deren Nutzen und Nebenwirkungen ausführlich besprechen.",
+        "Mit Angehörigen über eigene Hoffnungen, Ängste und Grenzen in Bezug auf belastende Behandlungen sprechen."
+      ]
+    },
+    {
+      "id": "illness_7",
+      "topic": "illness_care",
+      "order": 7,
+      "title": "Im Alltag einen guten Umgang mit meiner Krankheit finden",
+      "prompt": "Wie wichtig ist es Ihnen, Strategien zu finden, um im Alltag besser mit der Krankheit leben zu können?",
+      "description": "Krankheit bringt oft Unsicherheiten und Einschränkungen mit sich. Es kann hilfreich sein, Wege zu finden, mit Belastungen umzugehen, Kräfte zu bündeln und das eigene Leben trotzdem möglichst sinnvoll zu gestalten.",
+      "example_actions": [
+        "Mit Behandlungsteam und Angehörigen nach Ideen suchen, die den Alltag erleichtern oder strukturieren.",
+        "Hilfsangebote oder Beratungsstellen in Anspruch nehmen, um mit der Situation besser zurechtzukommen."
+      ]
+    },
+    {
+      "id": "illness_8",
+      "topic": "illness_care",
+      "order": 8,
+      "title": "Meine Ängste im Zusammenhang mit körperlichen Schmerzen oder anderen Formen des Leidens ausdrücken können",
+      "prompt": "Wie wichtig ist es Ihnen, offen über Ängste vor Schmerzen oder anderem Leid sprechen zu können?",
+      "description": "Angst vor Schmerzen, Atemnot oder seelischen und spirituellen Belastungen kann sehr stark sein. Es ist hilfreich, diese Ängste zu benennen, damit andere besser verstehen, was Ihnen Sorge bereitet und wovor Sie sich schützen möchten.",
+      "example_actions": [
+        "Mit Behandlungsteam, Angehörigen und der Vertretungsperson über konkrete Ängste und Vorstellungen sprechen.",
+        "Besonders belastende Befürchtungen schriftlich festhalten, zum Beispiel in einer Patientenverfügung."
+      ]
+    },
+  
+    {
+      "id": "practical_1",
+      "topic": "practical",
+      "order": 1,
+      "title": "Sicherstellen, dass die täglichen Aufgaben gemeistert werden",
+      "prompt": "Wie wichtig ist es Ihnen, dass alltägliche Aufgaben geregelt sind, falls Sie sie nicht mehr selbst erledigen können?",
+      "description": "Wenn Sie vorübergehend oder dauerhaft eingeschränkt sind, können Alltagsaufgaben wie Post, Pflanzen oder kleinere organisatorische Dinge liegen bleiben. Es kann entlasten, vorab zu überlegen, wer Sie dabei unterstützen könnte.",
+      "example_actions": [
+        "Personen aus dem Umfeld anfragen, ob sie bestimmte Alltagsaufgaben übernehmen würden.",
+        "Gemeinsam klären, welche Aufgaben genau anfallen und wie die Unterstützung konkret aussehen kann."
+      ]
+    },
+    {
+      "id": "practical_2",
+      "topic": "practical",
+      "order": 2,
+      "title": "Das Wohlbefinden und die Betreuung meiner kleinen Kinder sicherstellen",
+      "prompt": "Wie wichtig ist es Ihnen, für die Betreuung Ihrer Kinder vorzusorgen, falls Sie ausfallen?",
+      "description": "Wenn man Kinder hat, kann die Frage belasten, wer sich um sie kümmert, falls man längere Zeit krank ist oder stirbt. Es kann wichtig sein, Vertrauenspersonen zu benennen und sich über rechtliche oder soziale Unterstützung zu informieren.",
+      "example_actions": [
+        "Mit möglichen Betreuungspersonen sprechen und abklären, ob sie diese Aufgabe im Ernstfall übernehmen könnten.",
+        "Sich bei Sozialdiensten oder Beratungsstellen informieren, welche Unterstützungsmöglichkeiten es gibt."
+      ]
+    },
+    {
+      "id": "practical_3",
+      "topic": "practical",
+      "order": 3,
+      "title": "Meine Tiere gut versorgt wissen",
+      "prompt": "Wie wichtig ist es Ihnen, die Versorgung Ihrer Tiere zu regeln, falls Sie sich nicht mehr kümmern können?",
+      "description": "Haustiere können sehr wichtig sein. Wenn man ausfällt oder stirbt, müssen sie in gute Hände kommen. Es kann beruhigen, vorab zu klären, wer sich zuverlässig um sie kümmern könnte.",
+      "example_actions": [
+        "Mit Menschen sprechen, die sich vorstellen können, die Tiere zu übernehmen oder vorübergehend zu versorgen.",
+        "Sich über Tierschutzorganisationen oder andere Netzwerke informieren, die im Notfall unterstützen können."
+      ]
+    },
+    {
+      "id": "practical_4",
+      "topic": "practical",
+      "order": 4,
+      "title": "Meinen digitalen Nachlass verwalten",
+      "prompt": "Wie wichtig ist es Ihnen, zu regeln, was mit Ihren digitalen Daten und Konten passieren soll?",
+      "description": "Zum digitalen Leben gehören zum Beispiel E-Mail-Konten, soziale Netzwerke, Dateien auf Smartphone oder Computer. Es kann sinnvoll sein festzulegen, wer Zugang haben soll und was mit diesen Daten geschehen darf.",
+      "example_actions": [
+        "Eine Übersicht über wichtige Zugänge, Konten und Daten erstellen.",
+        "Mit einer vertrauten Person besprechen, wie sie im Ernstfall darauf zugreifen kann und entsprechende Vollmachten vorbereiten."
+      ]
+    },
+    {
+      "id": "practical_5",
+      "topic": "practical",
+      "order": 5,
+      "title": "Sicherstellen, dass meine finanziellen und administrativen Angelegenheiten abgewickelt werden",
+      "prompt": "Wie wichtig ist es Ihnen, dass Finanzen und Verträge geregelt sind, falls Sie das nicht mehr selbst tun können?",
+      "description": "Rechnungen, Steuern, Verträge oder Abonnemente müssen weiterlaufen oder beendet werden. Durch Vollmachten oder einen Vorsorgeauftrag kann eine Person bestimmt werden, die diese Aufgaben übernehmen darf.",
+      "example_actions": [
+        "Eine Bestandsaufnahme der wichtigsten finanziellen und administrativen Themen machen.",
+        "Mit einer nahestehenden Person über die Vertretung sprechen und gegebenenfalls Vollmachten oder einen Vorsorgeauftrag vorbereiten."
+      ]
+    },
+    {
+      "id": "practical_6",
+      "topic": "practical",
+      "order": 6,
+      "title": "Einen oder mehrere Lebensentwürfe würdigen",
+      "prompt": "Wie wichtig ist es Ihnen, noch einen Lebenswunsch oder ein Projekt zu verwirklichen oder zu würdigen?",
+      "description": "Vielleicht gibt es einen lang gehegten Traum oder ein Projekt, das Ihnen besonders am Herzen liegt – beruflich, familiär oder persönlich. Es kann erfüllend sein, sich bewusst damit zu befassen und zu schauen, wie weit es sich noch umsetzen lässt.",
+      "example_actions": [
+        "Eigene Ressourcen, Fähigkeiten und Unterstützungsmöglichkeiten sammeln, die bei der Umsetzung helfen könnten.",
+        "Mit Angehörigen, Behandlungsteam oder anderen Vertrauenspersonen besprechen, wie sich das Vorhaben realistisch angehen lässt."
+      ]
+    },
+    {
+      "id": "practical_7",
+      "topic": "practical",
+      "order": 7,
+      "title": "Erfahrungen und Wissenswertes weiter geben",
+      "prompt": "Wie wichtig ist es Ihnen, Ihr Wissen und Ihre Erfahrungen an andere weiterzugeben?",
+      "description": "Im Laufe des Lebens sammelt man viele Erfahrungen, Geschichten und Kenntnisse. Diese weiterzugeben – zum Beispiel an Familie oder andere Menschen – kann als wertvolles Vermächtnis erlebt werden.",
+      "example_actions": [
+        "Überlegen, welche Erinnerungen, Geschichten oder Einsichten man teilen möchte.",
+        "Eine Form wählen, etwa ein Gespräch, ein Brief, ein Audio- oder Video-Dokument oder eine schriftliche Sammlung."
+      ]
+    },
+    {
+      "id": "practical_8",
+      "topic": "practical",
+      "order": 8,
+      "title": "Mein Testament erstellen",
+      "prompt": "Wie wichtig ist es Ihnen, Ihren Nachlass in einem Testament zu regeln?",
+      "description": "In einem Testament kann festgelegt werden, wem man bestimmte Gegenstände oder Werte hinterlassen möchte. Es muss bestimmten rechtlichen Anforderungen entsprechen und so aufbewahrt werden, dass es im Todesfall gefunden wird.",
+      "example_actions": [
+        "Ein Testament verfassen und an einem sicheren Ort hinterlegen, zum Beispiel bei einer Vertrauensperson, einem Notariat oder einer Anwaltskanzlei.",
+        "Angehörige informieren, dass ein Testament existiert und wo es aufbewahrt wird."
+      ]
+    },
+    {
+      "id": "practical_9",
+      "topic": "practical",
+      "order": 9,
+      "title": "Jemandem etwas vorab übergeben, ohne lange zu warten",
+      "prompt": "Wie wichtig ist es Ihnen, bestimmte Dinge schon zu Lebzeiten weiterzugeben?",
+      "description": "Manche Gegenstände haben vor allem persönlichen oder emotionalen Wert, etwa Briefe, Fotos, Kunstwerke oder Erinnerungsstücke. Es kann schön sein, solche Dinge frühzeitig zu verschenken.",
+      "example_actions": [
+        "Überlegen, welche Dinge man gerne konkret einer bestimmten Person zu Lebzeiten schenken möchte.",
+        "Diese Übergaben bewusst gestalten, etwa in einem gemeinsamen Moment oder mit einer persönlichen Nachricht."
+      ]
+    },
+    {
+      "id": "practical_10",
+      "topic": "practical",
+      "order": 10,
+      "title": "Umgang mit meinen Organen und mit meinen biologischen und medizinischen Daten festlegen",
+      "prompt": "Wie wichtig ist es Ihnen, zu entscheiden, ob Organe oder medizinische Daten für andere verwendet werden dürfen?",
+      "description": "Organspende kann Leben retten oder verlängern, die Spende von Daten und Proben unterstützt die Forschung. Man kann getrennt entscheiden, ob man Organe spenden und ob man medizinische Daten oder Proben für Forschung zur Verfügung stellen will.",
+      "example_actions": [
+        "Sich bei offiziellen Stellen oder im Spital über Organspende und Forschung informieren.",
+        "Die eigene Haltung schriftlich festhalten, zum Beispiel in einer Patientenverfügung, und Angehörige darüber informieren."
+      ]
+    },
+    {
+      "id": "practical_11",
+      "topic": "practical",
+      "order": 11,
+      "title": "Meine Beerdigung gestalten",
+      "prompt": "Wie wichtig ist es Ihnen, Wünsche zur eigenen Beerdigung oder Trauerfeier festzulegen?",
+      "description": "Man kann vorab entscheiden, welche Form der Bestattung oder Zeremonie man sich wünscht, ob religiös oder nicht, und welche Atmosphäre, Musik oder Texte wichtig wären. Das kann Angehörige im Ernstfall entlasten.",
+      "example_actions": [
+        "Mit Angehörigen über Wünsche zur Bestattung und Trauerfeier sprechen.",
+        "Diese Vorstellungen schriftlich festhalten und dafür sorgen, dass sie im Ernstfall zugänglich sind."
+      ]
+    },
+  
+    {
+      "id": "dignity_1",
+      "topic": "dignity",
+      "order": 1,
+      "title": "Sicherstellen, dass mein Geschmack und meine Vorlieben im Alltag am Ort meiner Pflege respektiert werden",
+      "prompt": "Wie wichtig ist es Ihnen, dass Ihre persönlichen Vorlieben im Alltag der Pflege berücksichtigt werden?",
+      "description": "Am Ort der Pflege tragen kleine Dinge viel zum Wohlbefinden bei – etwa Musik, Düfte, Körperkontakt oder die Art der Pflege. Ebenso wichtig ist es, zu benennen, was man kaum erträgt oder lieber vermeiden möchte.",
+      "example_actions": [
+        "Eine Liste erstellen, was im Alltag guttut und was stört, und diese mit Behandlungsteam, Angehörigen und Vertretungsperson teilen.",
+        "Gespräche nutzen, um auch Werte wie Autonomie, Schamgefühl, Humor oder Spiritualität anzusprechen."
+      ]
+    },
+    {
+      "id": "dignity_2",
+      "topic": "dignity",
+      "order": 2,
+      "title": "Informieren darüber, was ich nicht ertragen würde oder welche Grenzen nicht überschritten werden dürfen",
+      "prompt": "Wie wichtig ist es Ihnen, klar zu sagen, was für Sie auf keinen Fall in Frage kommt?",
+      "description": "Manche Situationen oder Behandlungen wären für einen selbst unerträglich – etwa bestimmte Operationen, Verluste von Fähigkeiten oder das Gefühl, ganz allein zu sein. Es kann hilfreich sein, solche Grenzen klar auszusprechen.",
+      "example_actions": [
+        "Mit Behandlungsteam, Angehörigen und Vertretungsperson über persönliche «No-Gos» sprechen.",
+        "Diese Grenzen in einer Patientenverfügung oder einem ähnlichen Dokument festhalten."
+      ]
+    },
+    {
+      "id": "dignity_3",
+      "topic": "dignity",
+      "order": 3,
+      "title": "Mein Aussehen bewahren",
+      "prompt": "Wie wichtig ist es Ihnen, dass Ihr Aussehen nach Ihren Wünschen berücksichtigt wird?",
+      "description": "Kleidung, Frisur, Bart, Make-up oder andere Aspekte des Aussehens können zentral für das eigene Wohlbefinden und die Würde sein. Es kann wichtig sein, mitzuteilen, worauf man besonders Wert legt.",
+      "example_actions": [
+        "Dem Behandlungsteam und Angehörigen erklären, was beim Aussehen wichtig ist.",
+        "Eine kurze Notiz hinterlassen, damit diese Wünsche auch beachtet werden, wenn man es nicht mehr selbst sagen kann."
+      ]
+    },
+    {
+      "id": "dignity_4",
+      "topic": "dignity",
+      "order": 4,
+      "title": "Die Belastungen für meine Angehörigen verringern",
+      "prompt": "Wie wichtig ist es Ihnen, Ihre Angehörigen im Alltag und in der Pflege zu entlasten?",
+      "description": "Krankheit kann Angehörige organisatorisch und emotional stark fordern. Anpassungen in Wohnung oder Organisation sowie externe Hilfen können dazu beitragen, die Last zu verteilen.",
+      "example_actions": [
+        "Mit Angehörigen darüber sprechen, was für alle machbar ist und wo Unterstützung nötig wäre.",
+        "Sich über Angebote wie Spitex, Haushaltshilfen oder Entlastungsdienste informieren."
+      ]
+    },
+    {
+      "id": "dignity_5",
+      "topic": "dignity",
+      "order": 5,
+      "title": "Mit meinen spirituellen oder religiösen Überzeugungen harmonisch umgehen und mich respektiert fühlen",
+      "prompt": "Wie wichtig ist es Ihnen, dass Ihre spirituellen oder religiösen Überzeugungen respektiert und begleitet werden?",
+      "description": "Für manche Menschen sind Glaube, Spiritualität oder Sinnfragen in Krankheit und am Lebensende besonders wichtig. Gespräche, Rituale oder spirituelle Begleitung können helfen, innerlich zur Ruhe zu kommen.",
+      "example_actions": [
+        "Religiöse oder spirituelle Begleitung anfragen, zum Beispiel Seelsorge oder eine vertraute Person.",
+        "Mit Angehörigen und Behandlungsteam darüber sprechen, welche Rituale oder Haltungen Ihnen wichtig sind."
+      ]
+    },
+    {
+      "id": "dignity_6",
+      "topic": "dignity",
+      "order": 6,
+      "title": "Eine Aktivität oder ein Hobby aufrechterhalten, das mir Lebensfreude verleiht",
+      "prompt": "Wie wichtig ist es Ihnen, eine Aktivität oder ein Hobby beizubehalten, das Ihnen Freude gibt?",
+      "description": "Eine regelmässige Aktivität – körperlich, geistig oder sozial – kann das Gefühl von Lebensfreude und Normalität stärken. Es kann sich lohnen, gemeinsam zu überlegen, wie diese Aktivität trotz Krankheit möglich bleibt.",
+      "example_actions": [
+        "Überlegen, welche Aktivitäten Ihnen besonders guttun und welche davon realistisch sind.",
+        "Mit Angehörigen und Behandlungsteam besprechen, welche Anpassungen nötig wären, damit Sie diese weiterhin ausüben können."
+      ]
+    },
+    {
+      "id": "dignity_7",
+      "topic": "dignity",
+      "order": 7,
+      "title": "In guter Erinnerung bleiben",
+      "prompt": "Wie wichtig ist es Ihnen, wie andere Sie später in Erinnerung behalten?",
+      "description": "Menschen erleben unterschiedliche Seiten Ihrer Persönlichkeit. Es kann wichtig sein, bewusst etwas dazu beizutragen, welches Bild von Ihnen bleibt – zum Beispiel durch bestimmte Gesten, Gespräche oder Abschiede.",
+      "example_actions": [
+        "Darüber nachdenken, welche Erinnerungen und Eindrücke Ihnen für Ihre Angehörigen wichtig sind.",
+        "Mit nahestehenden Personen darüber sprechen oder etwas vorbereiten, das Sie hinterlassen möchten."
+      ]
+    },
+  
+    {
+      "id": "feelings_1",
+      "topic": "feelings",
+      "order": 1,
+      "title": "Meine Beziehung zu meinen Angehörigen aufrechterhalten",
+      "prompt": "Wie wichtig ist es Ihnen, die Verbindung zu Angehörigen und nahestehenden Menschen zu pflegen?",
+      "description": "Familie, Freundinnen, Freunde oder Nachbarschaft können im Verlauf einer Erkrankung besonders bedeutend sein. Es kann helfen, bewusst zu entscheiden, welche Beziehungen man stärken und wie man in Kontakt bleiben möchte.",
+      "example_actions": [
+        "Überlegen, mit wem man die Beziehung vertiefen oder bewusst pflegen möchte.",
+        "Mit Angehörigen und dem Behandlungsteam besprechen, wie gemeinsame Zeit und Austausch ermöglicht werden können."
+      ]
+    },
+    {
+      "id": "feelings_2",
+      "topic": "feelings",
+      "order": 2,
+      "title": "Erfahrungen austauschen mit Menschen, die die gleiche Krankheit hatten oder durchmachen wie ich",
+      "prompt": "Wie wichtig ist es Ihnen, sich mit Menschen auszutauschen, die Ähnliches erlebt haben?",
+      "description": "Begegnungen mit anderen Betroffenen können helfen, sich verstanden zu fühlen, Erfahrungen zu teilen und neue Wege im Umgang mit der Krankheit zu entdecken. Solche Kontakte können über Behandlungsteam oder Organisationen entstehen.",
+      "example_actions": [
+        "Beim Behandlungsteam den Wunsch nach Austausch mit anderen Betroffenen ansprechen.",
+        "Sich nach Selbsthilfegruppen oder Patientenorganisationen erkundigen, die zur eigenen Situation passen."
+      ]
+    },
+    {
+      "id": "feelings_3",
+      "topic": "feelings",
+      "order": 3,
+      "title": "Liebevolle oder fürsorgliche Gesten oder Berührungen erhalten",
+      "prompt": "Wie wichtig ist es Ihnen, Zuwendung und körperliche Nähe zu bekommen?",
+      "description": "Aufmerksamkeit, Zuneigung und Berührungen können gerade in belastenden Zeiten sehr bedeutsam sein. Es kann hilfreich sein zu sagen, welche Formen von Nähe man sich wünscht und von wem.",
+      "example_actions": [
+        "Sich klar machen, welche Gesten der Fürsorge gut tun und mit welchen Personen man sich wohlfühlt.",
+        "Mit Angehörigen und Behandlungsteam darüber sprechen, welche Art von Nähe passend ist und welche nicht."
+      ]
+    },
+    {
+      "id": "feelings_4",
+      "topic": "feelings",
+      "order": 4,
+      "title": "Sexualität beibehalten",
+      "prompt": "Wie wichtig ist es Ihnen, Sexualität – in welcher Form auch immer – in Ihrem Leben zu behalten?",
+      "description": "Sexualität kann in verschiedenen Lebensphasen ganz unterschiedlich aussehen. Es kann hilfreich sein, offen zu besprechen, ob und wie sie trotz Krankheit einen Platz im Leben haben soll.",
+      "example_actions": [
+        "Mit Partnerin, Partner oder einer vertrauten Person darüber sprechen, welche Wünsche und Grenzen bestehen.",
+        "Bei Bedarf das Thema im Behandlungsteam ansprechen, etwa bezüglich körperlicher Einschränkungen oder Nebenwirkungen."
+      ]
+    },
+    {
+      "id": "feelings_5",
+      "topic": "feelings",
+      "order": 5,
+      "title": "Einen Konflikt lösen",
+      "prompt": "Wie wichtig ist es Ihnen, einen belastenden Konflikt zu klären?",
+      "description": "Ungelöste Konflikte können stark beschäftigen – ob aktuell oder lange zurückliegend. Manchmal ist es entlastend, noch einmal das Gespräch zu suchen oder auf eine andere Weise etwas auszusprechen.",
+      "example_actions": [
+        "Überlegen, mit wem man einen Konflikt ansprechen möchte und was man sagen will.",
+        "Falls ein direktes Gespräch nicht möglich ist, einen Brief oder eine andere Form der Nachricht vorbereiten."
+      ]
+    },
+    {
+      "id": "feelings_6",
+      "topic": "feelings",
+      "order": 6,
+      "title": "Abschied nehmen",
+      "prompt": "Wie wichtig ist es Ihnen, bewusst Abschied zu gestalten?",
+      "description": "Es kann wichtig sein, zu überlegen, wie man sich von Menschen oder vom Leben verabschieden möchte – ob durch Gespräche, Schreiben, Rituale oder stille Gesten.",
+      "example_actions": [
+        "Eine Form des Abschieds wählen, die sich stimmig anfühlt, und dies mit Angehörigen besprechen.",
+        "Gegebenenfalls einen schriftlichen Abschiedsbrief verfassen und dafür sorgen, dass er zur richtigen Zeit gefunden wird."
+      ]
+    },
+    {
+      "id": "feelings_7",
+      "topic": "feelings",
+      "order": 7,
+      "title": "Allein oder nicht allein sterben",
+      "prompt": "Wie wichtig ist es Ihnen, ob Sie in den letzten Momenten allein oder in Gesellschaft sind?",
+      "description": "Manche Menschen wünschen sich, in den letzten Stunden begleitet zu sein, andere möchten eher für sich sein. Es kann helfen, diese Wünsche mit Angehörigen und Behandlungsteam zu teilen, damit sie berücksichtigt werden können.",
+      "example_actions": [
+        "Mit Angehörigen und Behandlungsteam klären, wie viel Begleitung oder Ruhe man sich am Lebensende wünscht.",
+        "Die eigenen Vorstellungen in einer Patientenverfügung oder schriftlichen Notiz festhalten."
+      ]
+    }
+  ]
+  
