@@ -1,1 +1,7 @@
 eol-chat-starter/Backend/development.env
+
+
+# Environment variables (API key) to keep local due to security reasons
+.env.local
+.env
+.env.*
