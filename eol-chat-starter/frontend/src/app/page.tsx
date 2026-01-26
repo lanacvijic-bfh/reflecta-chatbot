@@ -17,22 +17,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Bestimme API Base URL
+
     const getApiBaseUrl = (): string => {
-      if (typeof window === 'undefined') return '';
-      
-      const envUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (envUrl) return envUrl;
-      
-      // In Entwicklung: IMMER localhost:8787 verwenden, unabhängig davon, wie das Frontend aufgerufen wird
-      // (auch wenn über IP-Adresse aufgerufen, sollte der Backend-Server auf localhost laufen)
-      if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return 'http://localhost:8787';
-      }
-      
-      // Für Production: verwende den gleichen Origin (nur wenn nicht in Entwicklung)
-      return window.location.origin;
-    };
+  if (typeof window === "undefined") return "";
+
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (envUrl) return envUrl.replace(/\/$/, "");
+
+  return "http://localhost:8787";
+};
 
     const apiBaseUrl = getApiBaseUrl();
     

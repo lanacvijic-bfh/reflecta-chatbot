@@ -10,7 +10,7 @@ const getApiBaseUrl = (): string => {
   }
   
   // Client-side: prüfe Umgebungsvariable zuerst
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (envUrl) {
     return envUrl;
   }
@@ -23,7 +23,8 @@ const getApiBaseUrl = (): string => {
   }
   
   // Für Production: verwende den gleichen Origin (nur wenn nicht in Entwicklung)
-  return window.location.origin;
+return 'http://localhost:8787';
+
 };
 
 type Turn = { role: "user" | "assistant"; text: string; ts: number; card_id?: string; action?: string; importance?: string };
