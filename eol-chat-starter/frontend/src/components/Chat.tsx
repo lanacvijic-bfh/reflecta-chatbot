@@ -1051,7 +1051,7 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
                   <span className="quick-response-text">Ich bin unsicher</span>
                 </button>
               </div>
-            );
+            ); 
           })()}
         </div>
 
