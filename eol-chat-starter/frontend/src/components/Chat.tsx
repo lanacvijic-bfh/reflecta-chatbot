@@ -1056,7 +1056,7 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
         </div>
 
         <form id="composer" autoComplete="off" onSubmit={onSubmit}>
-          <label htmlFor="userInput" className="sr-only">
+          <label htmlFor="userInput" className="sr-only"> 
             Ihre Antwort
           </label>
           <textarea
