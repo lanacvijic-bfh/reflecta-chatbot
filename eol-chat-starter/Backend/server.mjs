@@ -187,13 +187,18 @@ app.use((req, res, next) => {
 // OpenAI Konfiguration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+console.log("OPENAI KEY PREFIX:", OPENAI_API_KEY?.slice(0, 12));
+console.log("OPENAI KEY LENGTH:", OPENAI_API_KEY?.length);
+console.log("About to initialize OpenAI client...");
+
 if (!OPENAI_API_KEY) {
   console.error('❌ Keine OpenAI API Key gefunden!');
-  console.error('   Bitte setzen Sie OPENAI_API_KEY in development.env');
+  console.error('💡 Bitte setzen Sie OPENAI_API_KEY in development.env');
   process.exit(1);
 }
 
 console.log('✅ Verwende OpenAI direkt');
+
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
   maxRetries: 2,
