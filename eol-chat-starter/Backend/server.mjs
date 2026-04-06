@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
@@ -147,17 +147,115 @@ function detectTopicFromUserMessage(userMessage) {
   return null;
 }
 
+function inferImportanceFromUserText(userText) {
+  const text = (userText || '').toLowerCase();
+  if (!text) return null;
+
+  if (
+    text.includes('nicht mehr sehr wichtig') ||
+    text.includes('nicht so wichtig') ||
+    text.includes('weniger wichtig') ||
+    text.includes('nicht wichtig') ||
+    text.includes('unwichtig')
+  ) {
+    return 'not_important';
+  }
+
+  if (
+    text.includes('sehr wichtig') ||
+    text.includes('extrem wichtig') ||
+    text.includes('außerordentlich wichtig') ||
+    text.includes('besonders wichtig')
+  ) {
+    return 'very_important';
+  }
+
+  if (text.includes('wichtig')) return 'important';
+  if (text.includes('unsicher') || text.includes('ich weiß nicht') || text.includes('weiss nicht')) return 'unsure';
+  return null;
+}
+
+function buildCurrentCardImportanceState(turns) {
+  const importanceByCardId = new Map();
+
+  turns.forEach((turn, index) => {
+    if (
+      turn.role === 'assistant' &&
+      turn.card_id &&
+      typeof turn.importance === 'string' &&
+      turn.importance.trim() !== ''
+    ) {
+      importanceByCardId.set(turn.card_id, turn.importance);
+    }
+
+    if (turn.role === 'user' && index > 0) {
+      const inferred = inferImportanceFromUserText(turn.text);
+      if (!inferred) return;
+
+      for (let i = index - 1; i >= 0; i--) {
+        const prev = turns[i];
+        if (prev?.role === 'assistant' && prev.card_id) {
+          importanceByCardId.set(prev.card_id, inferred);
+          break;
+        }
+      }
+    }
+  });
+
+  return importanceByCardId;
+}
+
 // env laden
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, 'development.env'), override: true });
+dotenv.config({ path: path.join(__dirname, 'development.env') });
 
 // Karten laden
 let CARDS = [];
 try {
   const cardsPath = path.join(__dirname, 'cards', 'cards.de.json');
   const cardsData = readFileSync(cardsPath, 'utf-8');
-  CARDS = JSON.parse(cardsData);
-  console.log(`✅ ${CARDS.length} Karten geladen`);
+  const allCards = JSON.parse(cardsData);
+
+  // Optionaler Whitelist-Filter: editierbar über cards/active-card-ids.json
+  // Wenn die Datei fehlt oder leer ist, werden alle Karten verwendet.
+  const whitelistPath = path.join(__dirname, 'cards', 'active-card-ids.json');
+  let activeCardIds = [];
+
+  if (existsSync(whitelistPath)) {
+    try {
+      const rawWhitelist = readFileSync(whitelistPath, 'utf-8');
+      const parsedWhitelist = JSON.parse(rawWhitelist);
+      if (Array.isArray(parsedWhitelist)) {
+        activeCardIds = parsedWhitelist
+          .map((id) => (typeof id === 'string' ? id.trim() : ''))
+          .filter((id) => id.length > 0);
+      } else {
+        console.warn(`⚠️ Whitelist-Datei ist kein Array: ${whitelistPath}. Verwende alle Karten.`);
+      }
+    } catch (whitelistErr) {
+      console.warn(`⚠️ Konnte Whitelist nicht lesen: ${whitelistErr.message}. Verwende alle Karten.`);
+    }
+  }
+
+  if (activeCardIds.length > 0) {
+    const whitelistSet = new Set(activeCardIds);
+    const filteredCards = allCards.filter((card) => whitelistSet.has(card.id));
+    const unknownIds = activeCardIds.filter((id) => !allCards.some((card) => card.id === id));
+
+    if (filteredCards.length > 0) {
+      CARDS = filteredCards;
+      console.log(`✅ ${CARDS.length}/${allCards.length} Karten per Whitelist geladen (${whitelistPath})`);
+      if (unknownIds.length > 0) {
+        console.warn(`⚠️ ${unknownIds.length} unbekannte card_id(s) in Whitelist ignoriert: ${unknownIds.join(', ')}`);
+      }
+    } else {
+      CARDS = allCards;
+      console.warn(`⚠️ Whitelist enthält keine gültigen IDs. Fallback auf alle ${allCards.length} Karten.`);
+    }
+  } else {
+    CARDS = allCards;
+    console.log(`✅ ${CARDS.length} Karten geladen (keine aktive Whitelist)`);
+  }
 } catch (e) {
   console.error('❌ Konnte Karten nicht laden:', e.message);
   CARDS = [];
@@ -187,18 +285,13 @@ app.use((req, res, next) => {
 // OpenAI Konfiguration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-console.log("OPENAI KEY PREFIX:", OPENAI_API_KEY?.slice(0, 12));
-console.log("OPENAI KEY LENGTH:", OPENAI_API_KEY?.length);
-console.log("About to initialize OpenAI client...");
-
 if (!OPENAI_API_KEY) {
   console.error('❌ Keine OpenAI API Key gefunden!');
-  console.error('💡 Bitte setzen Sie OPENAI_API_KEY in development.env');
+  console.error('   Bitte setzen Sie OPENAI_API_KEY in development.env');
   process.exit(1);
 }
 
 console.log('✅ Verwende OpenAI direkt');
-
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
   maxRetries: 2,
@@ -248,7 +341,8 @@ async function callPlanner(requestPayload, useNewFormat, fallbackPayload) {
 
 app.post('/api/plan', async (req, res) => {
   try {
-    const { turns = [], activeTopic = "", phase = 1 } = req.body || {};
+    const { turns = [], activeTopic = "" } = req.body || {};
+    let phase = req.body?.phase || 1; // Verwende let, damit phase geändert werden kann
     
     const lastTurns = turns.slice(-6);
     
@@ -268,7 +362,7 @@ app.post('/api/plan', async (req, res) => {
         utterance: [
           "Herzlich willkommen zur Reflexion über Prioritäten und Wünsche am Lebensende.",
           "Ich bin Reflecta und begleite Sie durch den Reflektionsprozess, in dem wir gemeinsam wichtige Themen erkunden. Die Themen wurden von HUG's Spezialisten entwickelt und deckt unterschiedliche Aspekte Ihres Lebens.",
-          "Der Prozess verläuft in zwei Phasen:\nPhase 1: Wir erkunden verschiedene Themen und sammeln erste Gedanken. Sie entscheiden, ob das Thema sehr wichtig, wichtig oder nicht so wichtig ist.\nPhase 2: Wir vertiefen die wichtigsten Themen und besprechen mögliche nächste Schritte.",
+          "Der Prozess verläuft in zwei Phasen:Phase 1: Wir erkunden verschiedene Themen und sammeln erste Gedanken. Sie entscheiden, ob das Thema sehr wichtig, wichtig oder nicht so wichtig ist.\nPhase 2: Wir vertiefen die wichtigsten Themen und besprechen mögliche nächste Schritte.",
           "Insgesamt gibt es ungefähr 30 Themen. Sie bestimmen das Tempo und können jederzeit pausieren. Zu den Themen gibt es keine richtigen oder falschen Antworten.",
           "Schreiben Sie, wenn Sie bereit sind!"
         ],
@@ -292,6 +386,15 @@ app.post('/api/plan', async (req, res) => {
     const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
     const lastUserMessage = lastTurn && lastTurn.role === 'user' ? lastTurn.text : 
                            (allUserTurns.length > 0 ? allUserTurns[allUserTurns.length - 1].text : '');
+    
+    // Prüfe, ob der User eine Pause einlegen möchte
+    const userWantsPause = lastUserMessage && (
+      lastUserMessage.toLowerCase().includes('pause') ||
+      lastUserMessage.toLowerCase().includes('unterbrechen') ||
+      lastUserMessage.toLowerCase().includes('stopp') ||
+      lastUserMessage.toLowerCase().includes('aufhören') ||
+      lastUserMessage.toLowerCase().includes('beenden')
+    );
     
     // Prüfe, ob die Eingabe leer ist
     if (!lastUserMessage || lastUserMessage.trim().length === 0) {
@@ -327,17 +430,50 @@ app.post('/api/plan', async (req, res) => {
     // WICHTIG: Prüfe zuerst, ob bereits ein activeTopic gesetzt ist
     // Wenn ja, verwende es, es sei denn, der User wählt explizit ein neues Topic
     let detectedTopic = null;
+    
+    // Prüfe, ob der User auf ein Thema hinweist (z.B. "es gäbe doch noch würde und werte")
+    const userMentionsTopic = detectTopicFromUserMessage(lastUserMessage);
+    const userHintsAtTopic = lastUserMessage && (
+      lastUserMessage.toLowerCase().includes('gäbe') ||
+      lastUserMessage.toLowerCase().includes('gibt') ||
+      lastUserMessage.toLowerCase().includes('noch') ||
+      lastUserMessage.toLowerCase().includes('auch') ||
+      lastUserMessage.toLowerCase().includes('fehlt') ||
+      lastUserMessage.toLowerCase().includes('vergessen') ||
+      lastUserMessage.toLowerCase().includes('dürfte') ||
+      lastUserMessage.toLowerCase().includes('sollte')
+    );
+    
     if (!activeTopic || activeTopic === "") {
       // Nur wenn noch kein Topic gewählt wurde, prüfe die neueste Nachricht
-      detectedTopic = detectTopicFromUserMessage(lastUserMessage);
+      detectedTopic = userMentionsTopic;
     } else {
-      // Wenn bereits ein Topic aktiv ist, prüfe nur, ob der User ein NEUES Topic wählt
-      // (z.B. wenn er sagt "praktisch" während illness_care aktiv ist)
-      const newTopic = detectTopicFromUserMessage(lastUserMessage);
-      if (newTopic && newTopic !== activeTopic) {
-        // User wählt explizit ein anderes Topic
-        detectedTopic = newTopic;
-        console.log(`🔄 User wechselt von ${activeTopic} zu ${newTopic}`);
+      // Wenn bereits ein Topic aktiv ist, prüfe ob der User ein NEUES Topic wählt
+      // ODER ob er auf ein Thema hinweist (auch wenn es ein anderes Thema ist)
+      if (userMentionsTopic && userMentionsTopic !== activeTopic) {
+        // User wählt explizit ein anderes Topic oder weist darauf hin
+        detectedTopic = userMentionsTopic;
+        console.log(`🔄 User wechselt/weist hin auf Thema ${userMentionsTopic} (aktuell: ${activeTopic})`);
+      } else if (userMentionsTopic && userMentionsTopic === activeTopic && userHintsAtTopic) {
+        // User weist auf das aktuelle Thema hin (z.B. "es gäbe doch noch würde und werte")
+        // Prüfe, ob es noch ungefragte Fragen zu diesem Thema gibt
+        const topicCardsForMentioned = CARDS.filter(c => c.topic === userMentionsTopic);
+        const askedCardsForMentioned = topicCardsForMentioned.filter(c => askedCardIds.has(c.id));
+        if (askedCardsForMentioned.length < topicCardsForMentioned.length) {
+          // Es gibt noch ungefragte Fragen zu diesem Thema
+          detectedTopic = userMentionsTopic;
+          console.log(`💡 User weist auf Thema ${userMentionsTopic} hin - es gibt noch ${topicCardsForMentioned.length - askedCardsForMentioned.length} ungefragte Fragen`);
+        }
+      } else if (userMentionsTopic && userHintsAtTopic) {
+        // User weist auf ein Thema hin, auch wenn es nicht das aktuelle ist
+        // Prüfe, ob es noch ungefragte Fragen zu diesem Thema gibt
+        const topicCardsForMentioned = CARDS.filter(c => c.topic === userMentionsTopic);
+        const askedCardsForMentioned = topicCardsForMentioned.filter(c => askedCardIds.has(c.id));
+        if (askedCardsForMentioned.length < topicCardsForMentioned.length) {
+          // Es gibt noch ungefragte Fragen zu diesem Thema
+          detectedTopic = userMentionsTopic;
+          console.log(`💡 User weist auf Thema ${userMentionsTopic} hin - es gibt noch ${topicCardsForMentioned.length - askedCardsForMentioned.length} ungefragte Fragen`);
+        }
       } else {
         // User antwortet auf Fragen, kein Topic-Wechsel
         detectedTopic = null;
@@ -348,10 +484,16 @@ app.post('/api/plan', async (req, res) => {
     
     console.log(`🔍 Topic Detection: lastTurn.role="${lastTurn?.role}", lastUserMessage="${lastUserMessage}", detectedTopic="${detectedTopic}", activeTopic="${activeTopic}", phase=${phase}, totalTurns=${turns.length}, userTurns=${allUserTurns.length}, isUserQuestion=${isUserQuestion}`);
     
-    // Wenn ein Thema erkannt wurde, setze currentTopic (auch wenn activeTopic schon gesetzt ist)
-    if (detectedTopic && !currentTopic) {
-      currentTopic = detectedTopic;
-      console.log(`✅ Setze currentTopic auf ${detectedTopic}`);
+    // Wenn ein Thema erkannt wurde, setze currentTopic
+    // Wenn der User auf ein Thema hinweist (z.B. "es gäbe doch noch würde und werte"), sollte currentTopic auch gesetzt werden
+    if (detectedTopic) {
+      if (!currentTopic || (userHintsAtTopic && detectedTopic !== currentTopic)) {
+        currentTopic = detectedTopic;
+        console.log(`✅ Setze currentTopic auf ${detectedTopic}${userHintsAtTopic ? ' (User weist darauf hin)' : ''}`);
+      } else if (userHintsAtTopic && detectedTopic === currentTopic) {
+        // User weist auf das aktuelle Thema hin - currentTopic bleibt gleich, aber wir wissen, dass es noch Fragen gibt
+        console.log(`💡 User weist auf aktuelles Thema ${detectedTopic} hin - es gibt noch ungefragte Fragen`);
+      }
     }
     
     // Karten für aktuelles Thema filtern (vorher definieren, falls es später verwendet wird)
@@ -416,22 +558,19 @@ app.post('/api/plan', async (req, res) => {
     const recentAssistantTurns = []; // Letzte 3 Assistant-Turns für Duplikatsprüfung
     const veryImportantCardIds = new Set(); // Karten, die als "very_important" markiert wurden
     const veryImportantFollowUpAsked = new Set(); // Karten, bei denen bereits nach dem Grund gefragt wurde
-    const completedTopics = new Set(); // Themen, die bereits abgeschlossen wurden (summarize_topic wurde aufgerufen)
-    const startedTopics = new Set(); // Themen, die bereits angefangen wurden (mindestens eine Karte wurde gefragt)
+    const completedTopics = new Set(); // Themen, die bereits abgeschlossen wurden (alle Fragen wurden gestellt)
     
+    // ZUERST: Sammle alle gefragten card_ids aus allen Turns
+    // WICHTIG: Nur Assistant-Turns mit ask_card sollten zählen (nicht follow_up_card, etc.)
     turns.forEach((turn, index) => {
       if (turn.card_id) {
+        // Zähle ALLE card_ids, die gefragt wurden (egal welche action)
+        // Dies zählt alle Karten, die dem User präsentiert wurden
         askedCardIds.add(turn.card_id);
         // Speichere den Prompt-Text für diese Karte
         if (turn.role === 'assistant') {
           askedCardPrompts.set(turn.card_id, turn.text.toLowerCase());
           recentAssistantTurns.push({ card_id: turn.card_id, text: turn.text.toLowerCase() });
-          
-          // Tracke gestartete Themen: Wenn eine Karte gefragt wurde, ist das Thema gestartet
-          const card = CARDS.find(c => c.id === turn.card_id);
-          if (card && card.topic) {
-            startedTopics.add(card.topic);
-          }
           
           // Prüfe, ob dies eine follow_up_card für eine very_important Karte ist
           const textLower = turn.text.toLowerCase();
@@ -450,49 +589,31 @@ app.post('/api/plan', async (req, res) => {
       }
       
       // Prüfe, ob summarize_topic aufgerufen wurde (Thema wurde abgeschlossen)
+      // WICHTIG: summarize_topic ist in Phase 1 VERBOTEN - nur in Phase 2/3 erlaubt
+      // Daher sollte diese Logik hier eigentlich nie in Phase 1 greifen
       if (turn.role === 'assistant' && turn.action === 'summarize_topic') {
         // Versuche target_topic aus dem Turn zu bekommen, sonst aus currentTopic oder dem Text
         const topicToMark = turn.target_topic || currentTopic;
         if (topicToMark) {
-          completedTopics.add(topicToMark);
-          console.log(`✅ Thema ${topicToMark} wurde als abgeschlossen markiert (summarize_topic wurde aufgerufen)`);
+          // Zusätzliche Validierung: Prüfe, ob wirklich ALLE Karten dieses Themas gefragt wurden
+          const topicCards = CARDS.filter(c => c.topic === topicToMark);
+          const askedCardsForTopic = topicCards.filter(c => askedCardIds.has(c.id));
+          
+          if (topicCards.length > 0 && askedCardsForTopic.length === topicCards.length) {
+            completedTopics.add(topicToMark);
+            console.log(`✅ Thema ${topicToMark} wurde als abgeschlossen markiert (summarize_topic wurde aufgerufen, alle ${topicCards.length} Karten wurden behandelt: ${askedCardsForTopic.length}/${topicCards.length})`);
+          } else {
+            console.log(`⚠️ WARNUNG: summarize_topic für Thema ${topicToMark} aufgerufen, aber nicht alle Karten gefragt (${askedCardsForTopic.length}/${topicCards.length}) - markiere NICHT als abgeschlossen`);
+          }
+        } else {
+          console.log(`⚠️ WARNUNG: summarize_topic aufgerufen, aber kein topicToMark gefunden (target_topic: ${turn.target_topic}, currentTopic: ${currentTopic})`);
         }
       }
       
-      // Zusätzlich: Prüfe den Text nach summarize_topic-Indikatoren
-      if (turn.role === 'assistant' && !completedTopics.has(currentTopic) && currentTopic) {
-        const textLower = turn.text.toLowerCase();
-        // Prüfe, ob der Text darauf hindeutet, dass ein Thema abgeschlossen wurde
-        // Erweiterte Erkennung: auch ohne "thema" oder "bereich" im Text
-        const completionIndicators = [
-          'alle karten', 'abgeschlossen', 'durchgesprochen', 'besprochen',
-          'alle praktische', 'alle fragen', 'praktische fragen', 'praktischen fragen',
-          'alle krankheit', 'krankheit und behandlung', 'alle gefühle', 'gefühle und beziehungen',
-          'alle würde', 'würde und werte', 'alle themen', 'themenbereiche'
-        ];
-        const hasCompletionIndicator = completionIndicators.some(indicator => textLower.includes(indicator));
-        
-        // Prüfe auch nach spezifischen Themen-Erwähnungen
-        const topicMentions = {
-          'illness_care': ['krankheit', 'behandlung', 'medizinisch'],
-          'practical': ['praktisch', 'organisatorisch', 'praktische fragen'],
-          'dignity': ['würde', 'werte', 'würde und werte'],
-          'feelings': ['gefühle', 'beziehungen', 'verbundenheit', 'gefühle und beziehungen']
-        };
-        
-        const mentionsCurrentTopic = topicMentions[currentTopic]?.some(mention => textLower.includes(mention)) || false;
-        
-        if (hasCompletionIndicator && (textLower.includes('thema') || textLower.includes('bereich') || textLower.includes('kategorie') || mentionsCurrentTopic)) {
-          // Prüfe, ob mindestens einige Karten des aktuellen Themas behandelt wurden
-          const topicCards = CARDS.filter(c => c.topic === currentTopic);
-          const askedCardsForTopic = topicCards.filter(c => askedCardIds.has(c.id));
-          // Wenn mindestens 50% der Karten gefragt wurden ODER alle gefragt wurden, markiere als abgeschlossen
-          if (topicCards.length > 0 && (askedCardsForTopic.length === topicCards.length || askedCardsForTopic.length >= Math.ceil(topicCards.length * 0.5))) {
-            completedTopics.add(currentTopic);
-            console.log(`✅ Thema ${currentTopic} wurde als abgeschlossen markiert (Text-Indikator erkannt: ${textLower.substring(0, 100)}..., ${askedCardsForTopic.length}/${topicCards.length} Karten behandelt)`);
-          }
-        }
-      }
+      // ENTFERNT: Text-basierte Erkennung abgeschlossener Themen war zu aggressiv
+      // Ein Thema wird NUR als abgeschlossen markiert, wenn:
+      // 1. summarize_topic explizit aufgerufen wurde, ODER
+      // 2. ALLE Karten des Themas gefragt wurden (siehe Code unten)
     });
     
     // Zusätzlich: Prüfe, ob alle Karten eines Themas behandelt wurden (als Fallback)
@@ -504,37 +625,46 @@ app.post('/api/plan', async (req, res) => {
       'feelings': ['gefühle', 'beziehungen', 'verbundenheit', 'gefühle und beziehungen']
     };
     
+    // KRITISCH: Markiere Themen als abgeschlossen, wenn ALLE Karten des Themas gefragt wurden
+    // WICHTIG: Prüfe für JEDES Thema einzeln, ob ALLE Karten gefragt wurden
+    // Logge zuerst den aktuellen Status
+    console.log(`📊 [TOPIC COMPLETION CHECK] Prüfe Themen-Abschluss:`);
+    console.log(`   Bereits als abgeschlossen markiert: ${Array.from(completedTopics).join(', ') || 'keine'}`);
+    console.log(`   Gefragte Karten gesamt: ${askedCardIds.size}/${CARDS.length}`);
+    
     allTopics.forEach(topic => {
+      const topicCards = CARDS.filter(c => c.topic === topic);
+      const askedCardsForTopic = topicCards.filter(c => askedCardIds.has(c.id));
+      const cardIdsForTopic = topicCards.map(c => c.id).join(', ');
+      const askedCardIdsForTopic = Array.from(askedCardsForTopic).map(c => c.id).join(', ');
+      
+      console.log(`   Thema ${topic}: ${askedCardsForTopic.length}/${topicCards.length} Karten behandelt`);
+      console.log(`     Karten IDs: [${cardIdsForTopic}]`);
+      console.log(`     Gefragte IDs: [${askedCardIdsForTopic}]`);
+      
       if (!completedTopics.has(topic)) {
-        const topicCards = CARDS.filter(c => c.topic === topic);
-        const askedCardsForTopic = topicCards.filter(c => askedCardIds.has(c.id));
-        
-        // Prüfe, ob es eine summarize_topic Nachricht für dieses Thema gibt (erweiterte Erkennung)
-        const hasSummarizeForTopic = turns.some(t => {
-          if (t.role !== 'assistant') return false;
-          const textLower = t.text.toLowerCase();
-          const mentions = topicMentions[topic] || [];
-          const mentionsTopic = mentions.some(mention => textLower.includes(mention));
-          
-          return t.action === 'summarize_topic' || 
-                 (textLower.includes('alle karten') && (textLower.includes('thema') || textLower.includes('bereich') || mentionsTopic)) ||
-                 (textLower.includes('abgeschlossen') && mentionsTopic) ||
-                 (textLower.includes('durchgesprochen') && mentionsTopic) ||
-                 (textLower.includes('besprochen') && mentionsTopic) ||
-                 (textLower.includes('alle') && mentionsTopic && (textLower.includes('fragen') || textLower.includes('karten')));
-        });
-        
-        // Wenn alle Karten eines Themas gefragt wurden UND es eine summarize_topic Nachricht gibt
-        if (topicCards.length > 0 && askedCardsForTopic.length === topicCards.length && hasSummarizeForTopic) {
+        // NUR wenn ALLE Karten eines Themas gefragt wurden, markiere es als abgeschlossen
+        if (topicCards.length > 0 && askedCardsForTopic.length === topicCards.length) {
           completedTopics.add(topic);
-          console.log(`✅ Thema ${topic} wurde als abgeschlossen markiert (alle ${topicCards.length} Karten wurden behandelt + summarize_topic erkannt)`);
-        } else if (topicCards.length > 0 && askedCardsForTopic.length >= Math.ceil(topicCards.length * 0.5) && hasSummarizeForTopic) {
-          // Auch wenn mindestens 50% der Karten gefragt wurden und es eine summarize_topic Nachricht gibt
-          completedTopics.add(topic);
-          console.log(`✅ Thema ${topic} wurde als abgeschlossen markiert (${askedCardsForTopic.length}/${topicCards.length} Karten behandelt + summarize_topic erkannt)`);
+          console.log(`   ✅ Thema ${topic} wurde als abgeschlossen markiert (alle ${topicCards.length} Karten wurden behandelt: ${askedCardsForTopic.length}/${topicCards.length})`);
+        } else if (topicCards.length > 0) {
+          console.log(`   📊 Thema ${topic}: ${askedCardsForTopic.length}/${topicCards.length} Karten behandelt - noch NICHT abgeschlossen`);
+        } else {
+          console.log(`   ⚠️ Thema ${topic}: Keine Karten gefunden!`);
+        }
+      } else {
+        // Prüfe, ob das Thema wirklich abgeschlossen sein sollte (Validierung)
+        if (topicCards.length > 0 && askedCardsForTopic.length < topicCards.length) {
+          console.log(`   ⚠️ WARNUNG: Thema ${topic} ist als abgeschlossen markiert, aber nicht alle Karten wurden gefragt (${askedCardsForTopic.length}/${topicCards.length})!`);
+          console.log(`   → Entferne aus completedTopics`);
+          completedTopics.delete(topic);
+        } else {
+          console.log(`   ✅ Thema ${topic} ist bereits als abgeschlossen markiert und validiert (${askedCardsForTopic.length}/${topicCards.length} Karten)`);
         }
       }
     });
+    
+    console.log(`📊 [TOPIC COMPLETION CHECK] Finaler Status: ${completedTopics.size}/4 Themen abgeschlossen: [${Array.from(completedTopics).join(', ')}]`);
     
     // Behalte nur die letzten 3 Assistant-Turns für Duplikatsprüfung
     if (recentAssistantTurns.length > 3) {
@@ -546,35 +676,175 @@ app.post('/api/plan', async (req, res) => {
     const unansweredCards = topicCards.filter(c => !answeredCardIds.has(c.id));
     const unaskedCards = topicCards.filter(c => !askedCardIds.has(c.id));
     
-    // Analysiere, welche Karten als "very_important" markiert wurden und ob bereits nach dem Grund gefragt wurde
+    // Analysiere, welche Karten aktuell als "very_important" markiert sind und ob bereits nach dem Grund gefragt wurde
+    const currentImportanceByCard = buildCurrentCardImportanceState(turns);
+    const currentlyVeryImportantCardIds = new Set(
+      Array.from(currentImportanceByCard.entries())
+        .filter(([, importance]) => importance === 'very_important')
+        .map(([cardId]) => cardId)
+    );
+
     const veryImportantCards = [];
     const discussionCards = new Set(); // Karten mit discussion: true (für Phase 2)
+    const processedVeryImportantCardIds = new Set(); // Verhindert Duplikate
+    
+    // Zuerst: Prüfe alle Assistant-Turns mit importance='very_important'
     turns.forEach((turn, index) => {
-      if (turn.role === 'user' && index > 0) {
-        const prevTurn = turns[index - 1];
-        if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id) {
-          const userText = turn.text.toLowerCase();
-          // Prüfe, ob der User "sehr wichtig" oder ähnliches gesagt hat
-          if (userText.includes('sehr wichtig') || userText.includes('extrem wichtig') || 
-              userText.includes('außerordentlich wichtig') || userText.includes('besonders wichtig')) {
-            veryImportantCards.push({
-              card_id: prevTurn.card_id,
-              user_response: turn.text,
-              turn_index: index
-            });
-            // Alle sehr wichtigen Karten erhalten discussion: true für Phase 2
-            discussionCards.add(prevTurn.card_id);
-          }
+      if (turn.role === 'assistant' && turn.importance === 'very_important' && turn.card_id) {
+        if (!processedVeryImportantCardIds.has(turn.card_id)) {
+          veryImportantCards.push({
+            card_id: turn.card_id,
+            user_response: '', // Wird später gefüllt, falls vorhanden
+            turn_index: index
+          });
+          discussionCards.add(turn.card_id);
+          processedVeryImportantCardIds.add(turn.card_id);
+          console.log(`✅ [VERY IMPORTANT] Karte ${turn.card_id} aus Assistant-Turn mit importance='very_important' erkannt`);
         }
-      }
-      // Prüfe auch importance-Feld direkt
-      if (turn.importance === 'very_important' && turn.card_id) {
-        discussionCards.add(turn.card_id);
       }
     });
     
+    // Dann: Prüfe alle User-Turns, die "sehr wichtig" sagen
+    turns.forEach((turn, index) => {
+      if (turn.role === 'user') {
+        const userText = turn.text.toLowerCase();
+        // Prüfe, ob der User "sehr wichtig" oder ähnliches gesagt hat
+        if (userText.includes('sehr wichtig') || userText.includes('extrem wichtig') || 
+            userText.includes('außerordentlich wichtig') || userText.includes('besonders wichtig')) {
+          // Suche rückwärts nach dem letzten Assistant-Turn mit ask_card und card_id
+          let foundCardId = null;
+          for (let i = index - 1; i >= 0; i--) {
+            const prevTurn = turns[i];
+            if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id && 
+                (prevTurn.action === 'ask_card' || !prevTurn.action)) {
+              foundCardId = prevTurn.card_id;
+              break;
+            }
+          }
+          
+          if (foundCardId && !processedVeryImportantCardIds.has(foundCardId)) {
+            veryImportantCards.push({
+              card_id: foundCardId,
+              user_response: turn.text,
+              turn_index: index
+            });
+            discussionCards.add(foundCardId);
+            processedVeryImportantCardIds.add(foundCardId);
+            console.log(`✅ [VERY IMPORTANT] Karte ${foundCardId} aus User-Turn "${turn.text.substring(0, 50)}" erkannt`);
+          } else if (foundCardId && processedVeryImportantCardIds.has(foundCardId)) {
+            // Karte wurde bereits erkannt, aber aktualisiere user_response falls leer
+            const existingCard = veryImportantCards.find(vic => vic.card_id === foundCardId);
+            if (existingCard && !existingCard.user_response) {
+              existingCard.user_response = turn.text;
+              console.log(`✅ [VERY IMPORTANT] User-Response für Karte ${foundCardId} aktualisiert`);
+            }
+          } else if (!foundCardId) {
+            console.log(`⚠️ [VERY IMPORTANT] User sagte "sehr wichtig", aber keine passende card_id gefunden (Turn ${index})`);
+          }
+        }
+      }
+    });
+    
+    const historicalVeryImportantIds = new Set(veryImportantCards.map(vic => vic.card_id));
+    const downgradedCardIds = Array.from(historicalVeryImportantIds).filter(
+      cardId => !currentlyVeryImportantCardIds.has(cardId)
+    );
+    if (downgradedCardIds.length > 0) {
+      console.log(`↩️ [VERY IMPORTANT DOWNGRADE] Karten wurden neu eingestuft und zählen nicht mehr als "sehr wichtig": ${downgradedCardIds.join(', ')}`);
+    }
+
+    const filteredVeryImportantCards = veryImportantCards.filter(vic => currentlyVeryImportantCardIds.has(vic.card_id));
+    veryImportantCards.splice(0, veryImportantCards.length, ...filteredVeryImportantCards);
+    discussionCards.clear();
+    veryImportantCards.forEach(vic => discussionCards.add(vic.card_id));
+
+    console.log(`📊 [VERY IMPORTANT COUNT] Aktuell: ${veryImportantCards.length} Karten: ${veryImportantCards.map(vic => vic.card_id).join(', ')}`);
+    
+    // Prüfe, ob alle Fragen in Phase 1 durch sind
+    // WICHTIG: Zwei Bedingungen müssen erfüllt sein:
+    // 1. Alle Karten wurden gefragt (askedCardIds.size >= CARDS.length), ODER
+    // 2. Alle 4 Themen sind abgeschlossen - EXPLIZIT prüfen, ob alle 4 Themen wirklich drin sind
+    const allCardsAsked = askedCardIds.size >= CARDS.length;
+    
+    // EXPLIZIT prüfen: Sind wirklich alle 4 Themen abgeschlossen?
+    const allFourTopics = ['illness_care', 'practical', 'dignity', 'feelings'];
+    const allTopicsReallyCompleted = allFourTopics.every(topic => completedTopics.has(topic));
+    const allTopicsCompleted = allTopicsReallyCompleted && completedTopics.size === 4;
+    
+    // DEBUG: Logge Details
+    console.log(`📊 [PHASE 1 STATUS CHECK]`);
+    console.log(`   allCardsAsked=${allCardsAsked} (${askedCardIds.size}/${CARDS.length} Karten gefragt)`);
+    console.log(`   completedTopics.size=${completedTopics.size}, expected=4`);
+    console.log(`   completedTopics content: [${Array.from(completedTopics).join(', ')}]`);
+    console.log(`   allFourTopics check:`);
+    allFourTopics.forEach(topic => {
+      const isCompleted = completedTopics.has(topic);
+      const topicCards = CARDS.filter(c => c.topic === topic);
+      const askedCardsForTopic = topicCards.filter(c => askedCardIds.has(c.id));
+      console.log(`     - ${topic}: ${isCompleted ? '✅' : '❌'} (${askedCardsForTopic.length}/${topicCards.length} Karten gefragt)`);
+    });
+    console.log(`   allTopicsReallyCompleted=${allTopicsReallyCompleted}`);
+    console.log(`   allTopicsCompleted=${allTopicsCompleted}`);
+    
+    const phase1Complete = allCardsAsked || allTopicsCompleted;
+    console.log(`   phase1Complete=${phase1Complete}`);
+    
+    const phaseTransitionAsked = turns.some(t => 
+      t.role === 'assistant' && 
+      t.text && 
+      (t.text.toLowerCase().includes('phase 2') || t.text.toLowerCase().includes('zweite phase')) &&
+      (t.text.toLowerCase().includes('wechseln') || t.text.toLowerCase().includes('fortfahren') || t.text.toLowerCase().includes('bereit'))
+    );
+    const userConfirmedPhase2 = lastUserMessage && (
+      lastUserMessage.toLowerCase().includes('ja') ||
+      lastUserMessage.toLowerCase().includes('ok') ||
+      lastUserMessage.toLowerCase().includes('gerne') ||
+      lastUserMessage.toLowerCase().includes('weiter') ||
+      lastUserMessage.toLowerCase().includes('bereit') ||
+      lastUserMessage.toLowerCase().includes('los') ||
+      lastUserMessage.toLowerCase().includes('phase 2') ||
+      lastUserMessage.toLowerCase().includes('zweite phase')
+    );
+    
+    // Zähle die Anzahl der "sehr wichtigen" Karten
+    const veryImportantCount = veryImportantCards.length;
+    const maxVeryImportant = 10;
+    
+    // Prüfe, ob der User zu einer Frage springen möchte (neu einstufen)
+    const userWantsToJump = lastUserMessage && (
+      lastUserMessage.toLowerCase().includes('springen') ||
+      lastUserMessage.toLowerCase().includes('neu einstufen') ||
+      lastUserMessage.toLowerCase().includes('ändern') ||
+      lastUserMessage.toLowerCase().includes('korrigieren') ||
+      lastUserMessage.toLowerCase().includes('nochmal')
+    );
+    
+    // KRITISCH: Wenn Phase 1 abgeschlossen ist (alle Karten gefragt ODER alle Themen abgeschlossen) 
+    // und User Phase 2 bestätigt hat, prüfe ob Phase 2 starten kann
+    // WICHTIG: Diese Prüfung erfolgt VOR dem LLM-Aufruf, damit Phase 2 sofort gesetzt wird
+    if (phase1Complete && phase === 1 && phaseTransitionAsked && userConfirmedPhase2) {
+      // Phase 2 kann nur starten, wenn es zwischen 1 und 10 "sehr wichtige" Karten gibt
+      if (veryImportantCount === 0) {
+        // Keine "sehr wichtigen" Karten - Phase 2 kann nicht starten
+        console.log(`⚠️ Phase 2 kann nicht starten: Keine "sehr wichtigen" Karten vorhanden`);
+        // Phase bleibt 1, LLM wird informiert (siehe Context-Anweisung)
+      } else if (veryImportantCount > maxVeryImportant) {
+        // Mehr als 10 "sehr wichtige" Karten - Phase 2 kann nicht starten
+        console.log(`⚠️ Phase 2 kann nicht starten: ${veryImportantCount} "sehr wichtige" Karten (max. ${maxVeryImportant})`);
+        // Phase bleibt 1, LLM wird informiert (siehe Context-Anweisung)
+      } else {
+        // Zwischen 1 und 10 "sehr wichtige" Karten - Phase 2 kann SOFORT starten
+        phase = 2;
+        console.log(`✅ [SOFORT-PHASE-2] Phase 1 abgeschlossen - User hat bestätigt → Wechsel zu Phase 2 SOFORT (${veryImportantCount} sehr wichtige Karten)`);
+        // Phase ist jetzt 2 - das LLM sollte dies im Context sehen und entsprechend eine Phase-2-Aktion zurückgeben
+      }
+    }
+    
+    
     // Prüfe, ob bereits nach dem Grund gefragt wurde
     const veryImportantWithReason = new Set();
+    // Tracke, welche Karten bereits eine follow_up_card erhalten haben (Phase 2)
+    const followUpCardsAsked = new Set(); // Karten, für die bereits eine follow_up_card gestellt wurde
     // Tracke Diskussions-Status für Phase 2: welche Fragen haben bereits Diskussion + Handlungsoptionen
     const discussionCompleted = new Set(); // Fragen, bei denen Diskussion abgeschlossen ist
     const actionOptionsAsked = new Set(); // Fragen, bei denen bereits nach Handlungsoptionen gefragt wurde
@@ -586,7 +856,15 @@ app.post('/api/plan', async (req, res) => {
     turns.forEach((turn, index) => {
       if (turn.role === 'assistant' && turn.card_id) {
         const textLower = turn.text.toLowerCase();
-        // Prüfe ob nach Grund gefragt wurde
+        
+        // KRITISCH: Prüfe, ob bereits eine follow_up_card für diese card_id gestellt wurde
+        if (turn.action === 'follow_up_card' || 
+            (textLower.includes('warum') && textLower.includes('wichtig')) ||
+            (textLower.includes('grund') && textLower.includes('wichtig'))) {
+          followUpCardsAsked.add(turn.card_id);
+        }
+        
+        // Prüfe ob nach Grund gefragt wurde (und User bereits geantwortet hat)
         if ((textLower.includes('warum') || textLower.includes('wichtig für sie') || textLower.includes('grund')) &&
             index > 0 && turns[index - 1].role === 'user') {
           veryImportantWithReason.add(turn.card_id);
@@ -664,43 +942,14 @@ app.post('/api/plan', async (req, res) => {
     // Berechne Fortschritt: verbleibende Themen und Fragen
     const totalTopics = 4;
     const completedTopicsCount = completedTopics.size;
-    const startedButNotCompletedTopicsCount = Array.from(startedTopics).filter(t => !completedTopics.has(t)).length;
-    const remainingTopicsCount = totalTopics - completedTopicsCount - startedButNotCompletedTopicsCount;
+    const remainingTopicsCount = totalTopics - completedTopicsCount;
     
     const totalQuestions = CARDS.length;
     const askedQuestionsCount = askedCardIds.size;
     const remainingQuestionsCount = totalQuestions - askedQuestionsCount;
     
-    // Berechne Anzahl der bereits als "sehr wichtig" markierten Fragen (GLOBAL, nicht pro Thema)
-    // Zähle ALLE Karten, die jemals als "sehr wichtig" markiert wurden
-    const allVeryImportantCardIdsForCount = new Set();
-    
-    // 1. Aus assistant turns mit importance='very_important'
-    turns.forEach(t => {
-      if (t.role === 'assistant' && t.importance === 'very_important' && t.card_id) {
-        allVeryImportantCardIdsForCount.add(t.card_id);
-      }
-    });
-    
-    // 2. Aus veryImportantCards Array (User hat "sehr wichtig" gesagt)
-    veryImportantCards.forEach(vic => {
-      if (vic.card_id) {
-        allVeryImportantCardIdsForCount.add(vic.card_id);
-      }
-    });
-    
-    // 3. Aus discussionCards, wenn sie auch in turns als very_important markiert wurden
-    discussionCards.forEach(cardId => {
-      const hasVeryImportantInTurns = turns.some((t, idx) => 
-        t.card_id === cardId && 
-        (t.importance === 'very_important' || 
-         (t.role === 'user' && idx > 0 && turns[idx - 1].card_id === cardId && 
-          t.text.toLowerCase().includes('sehr wichtig')))
-      );
-      if (hasVeryImportantInTurns || veryImportantCards.some(vic => vic.card_id === cardId)) {
-        allVeryImportantCardIdsForCount.add(cardId);
-      }
-    });
+    // Berechne Anzahl der aktuell als "sehr wichtig" markierten Fragen (nicht historisch)
+    const allVeryImportantCardIdsForCount = new Set(currentlyVeryImportantCardIds);
     
     const currentVeryImportantCount = allVeryImportantCardIdsForCount.size;
     
@@ -738,19 +987,16 @@ app.post('/api/plan', async (req, res) => {
         const cardOrder = [];
         turns.forEach((t, idx) => {
           if (t.role === 'assistant' && t.importance === 'very_important' && t.card_id) {
-            if (!cardOrder.includes(t.card_id)) {
+            if (currentlyVeryImportantCardIds.has(t.card_id) && !cardOrder.includes(t.card_id)) {
               cardOrder.push(t.card_id);
             }
           }
           if (t.role === 'user' && idx > 0) {
             const prevTurn = turns[idx - 1];
             if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id) {
-              const userText = t.text.toLowerCase();
-              if (userText.includes('sehr wichtig') || userText.includes('extrem wichtig') || 
-                  userText.includes('außerordentlich wichtig') || userText.includes('besonders wichtig')) {
-                if (!cardOrder.includes(prevTurn.card_id)) {
-                  cardOrder.push(prevTurn.card_id);
-                }
+              const inferred = inferImportanceFromUserText(t.text);
+              if (inferred === 'very_important' && currentlyVeryImportantCardIds.has(prevTurn.card_id) && !cardOrder.includes(prevTurn.card_id)) {
+                cardOrder.push(prevTurn.card_id);
               }
             }
           }
@@ -798,8 +1044,6 @@ ${questionsSinceLastPausePrompt >= 5 ? '→ Zeit für Pause/Export-Prompt (alle 
 === THEMEN-STATUS ===
 ${completedTopics.size > 0 ? `Abgeschlossene Themen (nicht mehr anbieten):
 ${Array.from(completedTopics).map(topic => `- ${topic} (${topicNames[topic] || topic})`).join('\n')}
-` : ''}${startedTopics.size > 0 ? `Gestartete Themen (fortfahren, nicht neu anbieten):
-${Array.from(startedTopics).filter(t => !completedTopics.has(t)).map(topic => `- ${topic} (${topicNames[topic] || topic})`).join('\n')}
 ` : ''}
 
 === FRAGEN-STATUS ===
@@ -841,33 +1085,60 @@ ${unaskedCards.length > 0 ? unaskedCards.map(c => `  • ${c.id}: ${c.title}`).j
 ${unansweredCards.length > 0 && unaskedCards.length === 0 ? `- Noch nicht beantwortet: ${unansweredCards.map(c => c.id).join(', ')}` : ''}` :
   `Verfügbare Themen:
 ${['illness_care', 'practical', 'dignity', 'feelings'].map(topic => {
-  const status = completedTopics.has(topic) ? 'abgeschlossen' : 
-                 startedTopics.has(topic) ? 'gestartet' : 'verfügbar';
+  const status = completedTopics.has(topic) ? 'abgeschlossen' : 'verfügbar';
   const count = allCardsByTopic[topic].length;
-  return `- ${topic} (${topicNames[topic]}): ${count} Fragen - ${status}`;
-}).join('\n')}`
+  const askedCount = allCardsByTopic[topic].filter(c => askedCardIds.has(c.id)).length;
+  return `- ${topic} (${topicNames[topic]}): ${count} Fragen gesamt, ${askedCount} gestellt - ${status}`;
+}).join('\n')}
+WICHTIG: Wenn present_topics verwendet wird, zeige IMMER ALLE vier Themenbereiche an: Krankheit & Behandlung, Praktisches & Organisatorisches, Würde & Werte, Gefühle & Beziehungen. Nur abgeschlossene Themen sollten nicht mehr angeboten werden.
+${completedTopics.size < 4 ? `AKTUELL: ${completedTopics.size}/4 Themen abgeschlossen. ${4 - completedTopics.size} Themen sind noch NICHT abgeschlossen und müssen noch durchgegangen werden.` : ''}`
 }
+
+${!phase1Complete && phase === 1 && completedTopics.size < 4 ? `🚨 KRITISCH: NOCH NICHT ALLE THEMEN ABGESCHLOSSEN!
+- Aktueller Status: ${completedTopics.size}/4 Themen abgeschlossen
+- Abgeschlossene Themen: ${completedTopics.size > 0 ? Array.from(completedTopics).map(t => topicNames[t] || t).join(', ') : 'keine'}
+- OFFENE THEMEN: ${4 - completedTopics.size}/4 (${['illness_care', 'practical', 'dignity', 'feelings'].filter(t => !completedTopics.has(t)).map(t => `${topicNames[t] || t} (${allCardsByTopic[t].filter(c => askedCardIds.has(c.id)).length}/${allCardsByTopic[t].length} Fragen gestellt)`).join(', ')})
+- VERBOTEN: Sage NICHT, dass "alle Themen durchgesprochen wurden" oder "alle Bereiche angeschaut wurden"! Es fehlen noch ${4 - completedTopics.size} Themenbereiche!
+- VERBOTEN: Erwähne NICHT Phase 2 oder "vertiefen" oder "nächster Schritt"! Phase 1 ist noch nicht abgeschlossen!
+- Wenn das aktuelle Thema (${currentTopic || 'keines'}) abgeschlossen ist, frage nach dem NÄCHSTEN Themenbereich mit present_topics oder direkt mit ask_card für das nächste offene Thema.` : ''}
 
 === BESONDERE SITUATION ===
 ${isUserQuestion ? `Der Benutzer stellt eine Frage: "${lastUserMessage}"
 → Erkläre detailliert (mindestens 100 Zeichen), verwende dieselbe card_id (${lastAssistantWithCard?.card_id || 'keine'}), stelle KEINE neue Frage nach der Erklärung.` : ''}
-${isCurrentResponseVeryImportant ? `WICHTIG: Der Benutzer hat gerade eine Frage als "sehr wichtig" markiert. Dies ist die ${veryImportantNumber}. Frage, die als "sehr wichtig" markiert wurde. Erwähne diese Nummer in deiner follow_up_card Nachricht (z.B. "Das ist Ihre ${veryImportantNumber}. Frage, die Sie als sehr wichtig wählen...").` : ''}
+${userWantsPause ? `WICHTIG: Der Benutzer möchte eine Pause einlegen. Reagiere freundlich auf die Pause und weise darauf hin, dass der Fortschritt oben rechts exportiert werden kann. Beispiel: "Gerne können Sie eine Pause machen. Falls Sie möchten, können Sie Ihren Fortschritt oben rechts exportieren, um später fortzufahren."` : ''}
+${isCurrentResponseVeryImportant && phase === 2 ? `WICHTIG: Der Benutzer hat gerade eine Frage als "sehr wichtig" markiert. Dies ist die ${veryImportantNumber}. Frage, die als "sehr wichtig" markiert wurde. Erwähne diese Nummer in deiner follow_up_card Nachricht (z.B. "Das ist Ihre ${veryImportantNumber}. Frage, die Sie als sehr wichtig wählen...").` : ''}
+${isCurrentResponseVeryImportant && phase === 1 ? `WICHTIG: Der Benutzer hat gerade eine Frage als "sehr wichtig" markiert. In Phase 1: Sende den Kommentar (z.B. "Das ist Ihre ${veryImportantNumber}. Sache, die Sie als sehr wichtig gewählt haben...") UND stelle direkt danach die nächste Frage. Verwende ein Array mit zwei Bubbles: [Kommentar, nächste Frage]. Beispiel: ["Das ist Ihre ${veryImportantNumber}. Sache, die Sie als sehr wichtig gewählt haben - das hilft, Ihre Prioritäten gut zu sortieren.", "Wie wichtig ist es Ihnen, dass...?"]` : ''}
+${phase1Complete && phase === 1 && !phaseTransitionAsked && veryImportantCount === 0 ? `WICHTIG: Alle Themen in Phase 1 wurden durchgesprochen (${completedTopics.size}/4 Themen abgeschlossen, ${askedCardIds.size}/${CARDS.length} Fragen gestellt), aber es wurden KEINE Fragen als "sehr wichtig" eingestuft. Phase 2 kann nicht gestartet werden, da mindestens 1 "sehr wichtige" Frage benötigt wird. Biete dem Benutzer an, zu Fragen zu springen und sie neu einzustufen. Beispiel: "Wir haben nun alle Themen durchgesprochen. Für Phase 2 benötigen wir mindestens eine Frage, die Sie als sehr wichtig einstufen. Möchten Sie zu bestimmten Fragen zurückkehren und sie neu bewerten?"` : ''}
+${phase1Complete && phase === 1 && !phaseTransitionAsked && veryImportantCount > 0 && veryImportantCount <= maxVeryImportant ? `WICHTIG: Alle Themen in Phase 1 wurden durchgesprochen (${completedTopics.size}/4 Themen abgeschlossen, ${askedCardIds.size}/${CARDS.length} Fragen gestellt). Frage den Benutzer, ob er zu Phase 2 wechseln möchte, um die sehr wichtigen Themen zu vertiefen. Beispiel: "Wir haben nun alle Themen durchgesprochen. Sie haben ${veryImportantCount} Frage${veryImportantCount > 1 ? 'n' : ''} als sehr wichtig eingestuft. Möchten Sie zu Phase 2 wechseln, um diese Themen zu vertiefen?"` : ''}
+${phase1Complete && phase === 1 && !phaseTransitionAsked && veryImportantCount > maxVeryImportant ? `WICHTIG: Alle Themen in Phase 1 wurden durchgesprochen (${completedTopics.size}/4 Themen abgeschlossen, ${askedCardIds.size}/${CARDS.length} Fragen gestellt), aber es wurden ${veryImportantCount} Fragen als "sehr wichtig" eingestuft (Maximum: ${maxVeryImportant}). Phase 2 kann nicht gestartet werden. Gehe alle sehr wichtigen Fragen der Reihe nach durch, damit der Benutzer auf maximal ${maxVeryImportant} "sehr wichtige" Fragen kommt. Beispiel: "Wir haben nun alle Themen durchgesprochen. Sie haben ${veryImportantCount} Fragen als sehr wichtig eingestuft. Für Phase 2 können wir maximal ${maxVeryImportant} sehr wichtige Fragen vertiefen. Lassen Sie uns diese der Reihe nach durchgehen, damit Sie die ${maxVeryImportant} wichtigsten auswählen können."` : ''}
+${phase1Complete && phase === 1 && phaseTransitionAsked && !userConfirmedPhase2 && veryImportantCount === 0 ? `WICHTIG: Du hast bereits gefragt, ob der Benutzer zu Phase 2 wechseln möchte, aber es wurden KEINE Fragen als "sehr wichtig" eingestuft. Phase 2 kann nicht gestartet werden. Biete dem Benutzer an, zu Fragen zu springen und sie neu einzustufen.` : ''}
+${phase1Complete && phase === 1 && phaseTransitionAsked && !userConfirmedPhase2 && veryImportantCount > maxVeryImportant ? `WICHTIG: Du hast bereits gefragt, ob der Benutzer zu Phase 2 wechseln möchte, aber es wurden ${veryImportantCount} Fragen als "sehr wichtig" eingestuft (Maximum: ${maxVeryImportant}). Phase 2 kann nicht gestartet werden. Gehe alle sehr wichtigen Fragen der Reihe nach durch.` : ''}
+${phase1Complete && phase === 1 && phaseTransitionAsked && !userConfirmedPhase2 && veryImportantCount > 0 && veryImportantCount <= maxVeryImportant ? `WICHTIG: Du hast bereits gefragt, ob der Benutzer zu Phase 2 wechseln möchte. Warte auf die Bestätigung des Benutzers (z.B. "ja", "ok", "weiter", "gerne").` : ''}
+${userWantsToJump && phase === 1 ? `WICHTIG: Der Benutzer möchte zu Fragen springen und sie neu einstufen. Biete an, zu bestimmten Fragen zurückzukehren, damit der Benutzer sie neu bewerten kann. Beispiel: "Gerne können wir zu bestimmten Fragen zurückkehren. Welche Frage möchten Sie neu bewerten?" oder liste einige Fragen auf, die noch nicht als "sehr wichtig" eingestuft wurden.` : ''}
+${phase === 2 ? `WICHTIG: Phase 2 ist aktiv! Beginne jetzt mit der Diskussion der sehr wichtigen Fragen. Starte mit follow_up_card für die erste sehr wichtige Frage. Liste der sehr wichtigen Fragen: ${veryImportantCards.map(vic => {
+  const card = CARDS.find(c => c.id === vic.card_id);
+  return card ? card.title : vic.card_id;
+}).join(', ')}` : ''}
+${phase === 2 && phase1Complete && phaseTransitionAsked && userConfirmedPhase2 ? `KRITISCH: Der Benutzer hat soeben Phase 2 bestätigt (z.B. "ja", "weiter", "machen wir weiter"). Du MUSST jetzt eine follow_up_card Aktion für die erste sehr wichtige Frage zurückgeben. Verwende die erste sehr wichtige Frage aus der Liste oben.` : ''}
 
 === REGELN ===
 ${phase === 1 ? `PHASE 1: Alle Themen durchgehen
 - Frage keine bereits beantworteten Fragen nochmal mit ask_card
-- Frage keine bereits behandelten Fragen nochmal (außer follow_up_card für Vertiefung)
+- Frage keine bereits behandelten Fragen nochmal
 - Gehe systematisch durch ungefragte Fragen
 - Wenn Thema gewählt: beginne sofort mit erster ungefragter Frage
-- WICHTIG: Frage ALLE Fragen eines Themas, bevor du zu summarize_topic wechselst oder ein anderes Thema anbietest
-- summarize_topic ist NUR erlaubt, wenn ALLE Karten des aktuellen Themas gefragt wurden (${unaskedCards.length > 0 ? `AKTUELL: ${unaskedCards.length} ungefragte Karten im Thema ${currentTopic} - frage diese zuerst!` : 'OK'})
-- Wenn very_important: nächster Schritt IMMER follow_up_card mit "Warum ist das wichtig?"
+- WICHTIG: Frage ALLE Fragen eines Themas, bevor du zu einem anderen Thema wechselst
+- VERBOTEN in Phase 1: summarize_topic, propose_action, wrap - diese Aktionen sind NUR in Phase 2/3 erlaubt
+- KEINE Zusammenfassungen in Phase 1 - fahre einfach mit der nächsten Frage oder dem nächsten Thema fort
+- Wenn very_important: KEINE follow_up_card in Phase 1 - fahre einfach mit der nächsten Frage fort. Die Erläuterung und Diskussion erfolgt in Phase 2.
 - Wenn importance = "unsure": Gib kurze, einfache Erklärung + Beispiel
 - Keine Handlungsempfehlungen in Phase 1
 - Erwähne NICHT explizit, um welche Karte/Frage es sich handelt - stelle die Frage einfach natürlich
 - VERBOTEN: "Beim Thema... geht es um die Frage:", "Bei der Frage...", "Zu der Frage..." - beginne direkt mit der Frage selbst
 - Frage alle 5-7 Fragen nach Pause oder Export mit Fortschrittsupdate (z.B. "Wir haben bereits X von Y Fragen besprochen. Möchten Sie eine Pause machen oder den Fortschritt exportieren?")
-${veryImportantCards.some(vic => !veryImportantWithReason.has(vic.card_id)) ? '- Es gibt sehr wichtige Fragen ohne Grund → stelle follow_up_card' : ''}` : phase === 2 ? `PHASE 2: Nur sehr wichtige Fragen (discussion: true) besprechen
+- KRITISCH: Stelle NIE eine Pause-Frage in derselben utterance wie eine ask_card Frage! Wenn action=ask_card, dann enthält utterance NUR die Topic-Frage, KEINE Pause-Frage. Pause-Fragen müssen in einem separaten Turn sein.
+- SPRINGEN ZU FRAGEN: Wenn der Benutzer zu Fragen springen möchte (z.B. "springen", "neu einstufen", "ändern", "korrigieren"), biete an, zu bestimmten Fragen zurückzukehren, damit sie neu bewertet werden können. Verwende ask_card mit der entsprechenden card_id.
+- WENN MEHR ALS 10 "SEHR WICHTIG": Wenn es mehr als 10 "sehr wichtige" Fragen gibt, gehe alle sehr wichtigen Fragen der Reihe nach durch, damit der Benutzer auf maximal 10 kommt. Stelle jede Frage erneut mit ask_card und lasse den Benutzer neu bewerten.` : phase === 2 ? `PHASE 2: Nur sehr wichtige Fragen (discussion: true) besprechen
 - Zeige nur Fragen mit discussion: true
 - Pro Frage: 1) follow_up_card "Warum wichtig?" → 2) propose_action "Handlungsoptionen?" → 3) summarize_topic "Zusammenfassung"
 - Nach "Warum wichtig" beantwortet: Frage nach Handlungsoptionen mit propose_action
@@ -1173,7 +1444,7 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
       }
     }
     
-    // Very Important: Automatische follow_up_card (wichtig für UX, daher beibehalten)
+    // Very Important: Automatische follow_up_card nur in Phase 2 (in Phase 1 wird nicht nachgefragt)
     // KRITISCH: Validiere, ob der User wirklich "sehr wichtig" gesagt hat, nicht nur "wichtig"
     if (parsed.importance === "very_important" && parsed.card_id && parsed.card_id !== "") {
       // Prüfe die letzte User-Antwort, um zu validieren, ob wirklich "sehr wichtig" gesagt wurde
@@ -1195,111 +1466,258 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
         // Keine follow_up_card für "important", nur für "very_important"
         console.log(`✅ Keine follow_up_card, da nur "wichtig" (nicht "sehr wichtig")`);
       } else if (isReallyVeryImportant) {
-        // User hat wirklich "sehr wichtig" gesagt → follow_up_card ist korrekt
-        const hasFollowUpForThisCard = veryImportantWithReason.has(parsed.card_id);
-        
-        // Verwende die bereits berechnete veryImportantNumber aus dem Context
-        // Prüfe, ob die aktuelle Karte bereits als "sehr wichtig" markiert wurde
-        const isAlreadyCounted = allVeryImportantCardIdsForCount.has(parsed.card_id);
-        
-        // Bestimme die korrekte Nummer für diese Karte (basierend auf der Reihenfolge der ersten Markierung)
-        let currentVeryImportantNumber;
-        
-        // Erstelle IMMER eine vollständige Liste aller "sehr wichtigen" Karten in der chronologischen Reihenfolge
-        // Dies muss VOR der Prüfung geschehen, damit wir die korrekte Position finden können
-        const cardOrder = [];
-        turns.forEach((t, idx) => {
-          // Prüfe assistant turns mit importance='very_important'
-          if (t.role === 'assistant' && t.importance === 'very_important' && t.card_id) {
-            if (!cardOrder.includes(t.card_id)) {
-              cardOrder.push(t.card_id);
-            }
+        // User hat wirklich "sehr wichtig" gesagt
+        // In Phase 1: KEINE follow_up_card stellen, einfach mit nächster Frage fortfahren
+        // In Phase 2: follow_up_card stellen
+        if (phase === 1) {
+          console.log(`✅ Phase 1: Frage ${parsed.card_id} als "very_important" markiert - keine follow_up_card in Phase 1, fahre mit nächster Frage fort`);
+          // Stelle sicher, dass die action nicht follow_up_card ist, sondern ask_card oder die nächste Frage
+          if (parsed.action === "follow_up_card") {
+            // Ändere zu ask_card für die nächste Frage
+            parsed.action = "ask_card";
+            console.log(`🔄 Ändere action von follow_up_card zu ask_card für Phase 1`);
           }
-          // Prüfe user turns, die "sehr wichtig" sagen (beim ERSTEN Mal)
-          if (t.role === 'user' && idx > 0) {
-            const prevTurn = turns[idx - 1];
-            if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id) {
-              const userText = t.text.toLowerCase();
-              if ((userText.includes('sehr wichtig') || userText.includes('extrem wichtig') || 
-                   userText.includes('außerordentlich wichtig') || userText.includes('besonders wichtig')) &&
-                  !cardOrder.includes(prevTurn.card_id)) {
-                // Nur hinzufügen, wenn die Karte noch nicht in der Liste ist (beim ERSTEN Mal)
-                cardOrder.push(prevTurn.card_id);
-              }
-            }
-          }
-        });
-        
-        // Finde die Position dieser Karte in der Reihenfolge
-        const position = cardOrder.indexOf(parsed.card_id);
-        
-        if (isAlreadyCounted) {
-          // Karte wurde bereits gezählt → verwende ihre ursprüngliche Position
-          if (position >= 0) {
-            currentVeryImportantNumber = position + 1;
-            console.log(`📊 Karte ${parsed.card_id} bereits gezählt - ursprüngliche Position: ${currentVeryImportantNumber} (Reihenfolge: ${cardOrder.join(', ')})`);
-          } else {
-            // Fallback: Karte sollte in cardOrder sein, ist sie aber nicht → verwende currentVeryImportantCount
-            // Dies sollte nicht passieren, aber falls doch, verwenden wir die Gesamtzahl
-            currentVeryImportantNumber = currentVeryImportantCount;
-            console.warn(`⚠️ Karte ${parsed.card_id} sollte bereits gezählt sein, aber nicht in cardOrder gefunden! Verwende Fallback: ${currentVeryImportantCount}`);
-          }
-        } else {
-          // Karte wurde noch nicht gezählt → neue Karte, verwende die berechnete Nummer
-          currentVeryImportantNumber = veryImportantNumber;
-          console.log(`📊 Neue "sehr wichtige" Karte ${parsed.card_id} - Nummer: ${currentVeryImportantNumber} (Reihenfolge: ${cardOrder.join(', ')})`);
-        }
-        
-        const isFirstVeryImportant = currentVeryImportantNumber === 1;
-        
-        if (!hasFollowUpForThisCard) {
-          console.log(`🔍 Frage ${parsed.card_id} als "very_important" markiert → follow_up_card (validiert: User sagte wirklich "sehr wichtig") - Nummer: ${currentVeryImportantNumber}`);
-          parsed.action = "follow_up_card";
           
-          // Stelle sicher, dass die Nummer IMMER in der Nachricht erwähnt wird
-          const card = CARDS.find(c => c.id === parsed.card_id);
-          const cardTitle = card?.title || "diese Frage";
+          // WICHTIG: Nach dem Kommentar muss direkt die nächste Frage kommen
+          // Finde die nächste verfügbare Frage
+          const topicCards = currentTopic ? CARDS.filter(c => c.topic === currentTopic) : [];
+          const unaskedCards = topicCards.filter(c => !askedCardIds.has(c.id));
           
-          // Prüfe, ob die Nummer bereits korrekt in der utterance erwähnt wird
-          const utteranceLower = utteranceToString(parsed.utterance).toLowerCase();
-          
-          // Prüfe auf korrekte Nummer (mit Punkt oder Leerzeichen)
-          const hasCorrectNumber = utteranceLower.includes(`ihre ${currentVeryImportantNumber}.`) || 
-                                  utteranceLower.includes(`ihre ${currentVeryImportantNumber} `) ||
-                                  utteranceLower.includes(`ihre ${currentVeryImportantNumber}te`) ||
-                                  (isFirstVeryImportant && (utteranceLower.includes('ihre erste') || utteranceLower.includes('erste frage')));
-          
-          // Prüfe auch, ob eine FALSCHE Nummer erwähnt wird (z.B. "erste" wenn es eigentlich die zweite sein sollte)
-          const hasWrongNumber = !isFirstVeryImportant && (
-            utteranceLower.includes('ihre erste') || 
-            utteranceLower.includes('erste frage') ||
-            /ihre (zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte)/.test(utteranceLower)
-          ) && !hasCorrectNumber;
-          
-          // Wenn die Nummer nicht korrekt erwähnt wird ODER eine falsche Nummer vorhanden ist, korrigiere
-          if (!hasCorrectNumber || hasWrongNumber) {
-            // Konvertiere utterance zu String, falls es ein Array ist
+          if (unaskedCards.length > 0) {
+            const nextCard = unaskedCards[0];
             const utteranceStr = Array.isArray(parsed.utterance) 
               ? parsed.utterance.join(' ') 
               : (parsed.utterance || '');
             
-            if (isFirstVeryImportant) {
-              // Erste Frage: Verwende spezielle Formulierung
-              parsed.utterance = `Das ist Ihre erste Frage, die Sie als sehr wichtig wählen. Das hilft uns, Ihre Prioritäten besser zu verstehen.\n\n${utteranceStr || `Warum ist ${cardTitle} so wichtig für Sie?`}`;
+            // Prüfe, ob die utterance einen Kommentar über "sehr wichtig" enthält
+            const utteranceLower = utteranceStr.toLowerCase();
+            const hasComment = utteranceLower.includes('das ist ihre') || 
+                              utteranceLower.includes('das ist deine') ||
+                              (utteranceLower.match(/\d+\.?\s*(sache|frage|aussage)/) && utteranceLower.includes('sehr wichtig'));
+            
+            if (hasComment) {
+              // Die utterance enthält einen Kommentar - trenne Kommentar von Frage, um Doppelungen zu vermeiden
+              const questionRegex = /(wie wichtig[^?]*\?)/i;
+              const questionFromUtterance = utteranceStr.match(questionRegex)?.[0]?.trim();
+              const commentOnly = utteranceStr.replace(questionRegex, '').trim();
+              
+              // Wähle eine einzelne Frage-Bubble: bevorzugt die aus der Utterance, sonst Prompt/Title
+              let nextQuestionBubble = questionFromUtterance || nextCard.prompt || nextCard.title;
+              if (
+                questionFromUtterance &&
+                nextCard.prompt &&
+                nextCard.prompt.toLowerCase().includes(questionFromUtterance.toLowerCase().slice(0, 20))
+              ) {
+                nextQuestionBubble = questionFromUtterance;
+              }
+              
+              // Erstelle Array mit zwei Bubbles: [Kommentar?, Frage]
+              const bubbles = [];
+              if (commentOnly) bubbles.push(commentOnly);
+              if (nextQuestionBubble) bubbles.push(nextQuestionBubble);
+              
+              parsed.utterance = bubbles.length === 1 ? bubbles[0] : bubbles;
+              parsed.card_id = nextCard.id;
+              parsed.target_topic = currentTopic || parsed.target_topic;
+              
+              console.log(`✨ Phase 1: Füge nächste Frage nach Kommentar hinzu: ${nextCard.id} - "${nextQuestionBubble.substring(0, 50)}..."`);
             } else {
-              // Alle weiteren: Füge die Nummer am Anfang hinzu
-              // Entferne eventuell vorhandene falsche Nummernangaben
+              // Kein Kommentar gefunden - stelle sicher, dass eine Frage gestellt wird
+              parsed.card_id = nextCard.id;
+              parsed.utterance = nextCard.prompt || nextCard.title;
+              parsed.target_topic = currentTopic || parsed.target_topic;
+              console.log(`✨ Phase 1: Stelle nächste Frage: ${nextCard.id}`);
+            }
+          } else {
+            // Keine weiteren Fragen im aktuellen Thema - behalte die utterance wie sie ist
+            console.log(`⚠️ Phase 1: Keine weiteren Fragen im Thema ${currentTopic}, behalte utterance wie sie ist`);
+          }
+        } else {
+          // Phase 2: follow_up_card stellen
+          const hasFollowUpForThisCard = veryImportantWithReason.has(parsed.card_id);
+          
+          // KRITISCH: Prüfe, ob diese Karte bereits vollständig diskutiert wurde (Zusammenfassung bestätigt)
+          // Nur dann sollten wir zur nächsten Karte wechseln
+          const isFullyDiscussed = discussionCompleted.has(parsed.card_id) || summariesConfirmed.has(parsed.card_id);
+          
+          // KRITISCH: Prüfe, ob diese Karte bereits vollständig diskutiert wurde
+          // Wenn ja, wechsle automatisch zur nächsten noch nicht diskutierten Karte
+          if (isFullyDiscussed && parsed.action === "follow_up_card") {
+            console.log(`🚫 Phase 2: follow_up_card für ${parsed.card_id} wurde bereits vollständig diskutiert - wechsle zu nächster`);
+            // Finde die nächste sehr wichtige Karte, die noch nicht vollständig diskutiert wurde
+            const nextUndiscussedCard = veryImportantCards.find(vic => 
+              !summariesConfirmed.has(vic.card_id) && 
+              discussionCards.has(vic.card_id)
+            );
+            
+            if (nextUndiscussedCard) {
+              const card = CARDS.find(c => c.id === nextUndiscussedCard.card_id);
+              
+              // Prüfe, welcher Schritt als nächstes kommt
+              if (!followUpCardsAsked.has(nextUndiscussedCard.card_id)) {
+                // Noch keine follow_up_card gestellt → stelle sie
+                parsed.action = "follow_up_card";
+                parsed.card_id = nextUndiscussedCard.card_id;
+                parsed.utterance = `Warum ist ${card?.title || 'das'} so wichtig für Sie?`;
+                parsed.target_topic = card?.topic || "";
+                console.log(`✅ Phase 2: Wechsle zu nächster undiskutierter Karte: ${nextUndiscussedCard.card_id} (follow_up_card)`);
+              } else if (!veryImportantWithReason.has(nextUndiscussedCard.card_id)) {
+                // follow_up_card gestellt, aber noch keine Antwort → warte (sollte nicht passieren)
+                console.log(`⏳ Phase 2: Warte noch auf Antwort zu follow_up_card für ${nextUndiscussedCard.card_id}`);
+              } else if (!actionOptionsAsked.has(nextUndiscussedCard.card_id)) {
+                // Grund bereits erfragt → frage nach Handlungsoptionen
+                parsed.action = "propose_action";
+                parsed.card_id = nextUndiscussedCard.card_id;
+                const examples = card?.example_actions?.slice(0, 3).join(', ') || 'verschiedene Möglichkeiten';
+                parsed.utterance = `Welche Handlungsoptionen wären für Sie hilfreich? Hier sind einige Beispiele, wie man damit umgehen kann: ${examples}.`;
+                parsed.target_topic = card?.topic || "";
+                console.log(`✅ Phase 2: Wechsle zu nächster undiskutierter Karte: ${nextUndiscussedCard.card_id} (propose_action)`);
+              } else if (!actionOptionsAnswered.has(nextUndiscussedCard.card_id)) {
+                // Warte noch auf Antwort zu Handlungsoptionen
+                console.log(`⏳ Phase 2: Warte noch auf Antwort zu Handlungsoptionen für ${nextUndiscussedCard.card_id}`);
+              } else {
+                // Handlungsoptionen beantwortet → Zusammenfassung
+                parsed.action = "summarize_topic";
+                parsed.card_id = nextUndiscussedCard.card_id;
+                parsed.utterance = `Zu der Frage "${card?.title || 'diesem Thema'}" habe ich von Ihnen gehört, dass... [Fasse hier die Antworten zusammen, OHNE die Frage zu wiederholen]. Ist diese Zusammenfassung für Sie so stimmig, oder möchten Sie etwas ergänzen oder korrigieren?`;
+                parsed.target_topic = card?.topic || "";
+                console.log(`✅ Phase 2: Wechsle zu nächster undiskutierter Karte: ${nextUndiscussedCard.card_id} (summarize_topic)`);
+              }
+            } else {
+              // Alle sehr wichtigen Karten wurden bereits diskutiert
+              console.log(`✅ Phase 2: Alle sehr wichtigen Karten wurden bereits diskutiert - verwende wrap oder nächste Aktion`);
+              // Lass das LLM entscheiden, was als nächstes kommt (wrap, etc.)
+            }
+            // Überspringe den Rest der Logik für diese Karte
+          } else {
+            // Verwende die bereits berechnete veryImportantNumber aus dem Context
+            // Prüfe, ob die aktuelle Karte bereits als "sehr wichtig" markiert wurde
+            const isAlreadyCounted = allVeryImportantCardIdsForCount.has(parsed.card_id);
+            
+            // Bestimme die korrekte Nummer für diese Karte (basierend auf der Reihenfolge der ersten Markierung)
+            let currentVeryImportantNumber;
+          
+          // Erstelle IMMER eine vollständige Liste aller "sehr wichtigen" Karten in der chronologischen Reihenfolge
+          // Dies muss VOR der Prüfung geschehen, damit wir die korrekte Position finden können
+          const cardOrder = [];
+          turns.forEach((t, idx) => {
+            // Prüfe assistant turns mit importance='very_important'
+            if (t.role === 'assistant' && t.importance === 'very_important' && t.card_id) {
+              if (currentlyVeryImportantCardIds.has(t.card_id) && !cardOrder.includes(t.card_id)) {
+                cardOrder.push(t.card_id);
+              }
+            }
+            // Prüfe user turns, die "sehr wichtig" sagen (beim ERSTEN Mal)
+            if (t.role === 'user' && idx > 0) {
+              const prevTurn = turns[idx - 1];
+              if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id) {
+                const inferred = inferImportanceFromUserText(t.text);
+                if (
+                  inferred === 'very_important' &&
+                  currentlyVeryImportantCardIds.has(prevTurn.card_id) &&
+                  !cardOrder.includes(prevTurn.card_id)
+                ) {
+                  // Nur hinzufügen, wenn die Karte noch nicht in der Liste ist (beim ERSTEN Mal)
+                  cardOrder.push(prevTurn.card_id);
+                }
+              }
+            }
+          });
+          
+          // Finde die Position dieser Karte in der Reihenfolge
+          const position = cardOrder.indexOf(parsed.card_id);
+          
+          if (isAlreadyCounted) {
+            // Karte wurde bereits gezählt → verwende ihre ursprüngliche Position
+            if (position >= 0) {
+              currentVeryImportantNumber = position + 1;
+              console.log(`📊 Karte ${parsed.card_id} bereits gezählt - ursprüngliche Position: ${currentVeryImportantNumber} (Reihenfolge: ${cardOrder.join(', ')})`);
+            } else {
+              // Fallback: Karte sollte in cardOrder sein, ist sie aber nicht → verwende currentVeryImportantCount
+              // Dies sollte nicht passieren, aber falls doch, verwenden wir die Gesamtzahl
+              currentVeryImportantNumber = currentVeryImportantCount;
+              console.warn(`⚠️ Karte ${parsed.card_id} sollte bereits gezählt sein, aber nicht in cardOrder gefunden! Verwende Fallback: ${currentVeryImportantCount}`);
+            }
+          } else {
+            // Karte wurde noch nicht gezählt → neue Karte, verwende die berechnete Nummer
+            currentVeryImportantNumber = veryImportantNumber;
+            console.log(`📊 Neue "sehr wichtige" Karte ${parsed.card_id} - Nummer: ${currentVeryImportantNumber} (Reihenfolge: ${cardOrder.join(', ')})`);
+          }
+          
+          const isFirstVeryImportant = currentVeryImportantNumber === 1;
+          
+          if (!hasFollowUpForThisCard) {
+            console.log(`🔍 Phase 2: Frage ${parsed.card_id} als "very_important" markiert → follow_up_card (validiert: User sagte wirklich "sehr wichtig") - Nummer: ${currentVeryImportantNumber}`);
+            parsed.action = "follow_up_card";
+            
+            // Stelle sicher, dass die Nummer IMMER in der Nachricht erwähnt wird
+            const card = CARDS.find(c => c.id === parsed.card_id);
+            const cardTitle = card?.title || "diese Frage";
+            
+            // Prüfe, ob die Nummer bereits korrekt in der utterance erwähnt wird
+            const utteranceLower = utteranceToString(parsed.utterance).toLowerCase();
+            
+            // Prüfe auf korrekte Nummer (mit Punkt oder Leerzeichen)
+            const hasCorrectNumber = utteranceLower.includes(`ihre ${currentVeryImportantNumber}.`) || 
+                                    utteranceLower.includes(`ihre ${currentVeryImportantNumber} `) ||
+                                    utteranceLower.includes(`ihre ${currentVeryImportantNumber}te`) ||
+                                    (isFirstVeryImportant && (utteranceLower.includes('ihre erste') || utteranceLower.includes('erste frage')));
+            
+            // Prüfe auch, ob eine FALSCHE Nummer erwähnt wird (z.B. "erste" wenn es eigentlich die zweite sein sollte)
+            const hasWrongNumber = !isFirstVeryImportant && (
+              utteranceLower.includes('ihre erste') || 
+              utteranceLower.includes('erste frage') ||
+              /ihre (zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte)/.test(utteranceLower)
+            ) && !hasCorrectNumber;
+            
+            // In Phase 2: Entferne die "erste Frage, die Sie als sehr wichtig wählen"-Nachricht
+            // Diese Nachricht ist nur für Phase 1 gedacht, nicht für Phase 2 Diskussionen
+            if (phase === 2) {
+              // In Phase 2: Entferne die Phase-1-Nachricht, wenn sie vorhanden ist
+              const utteranceStr = Array.isArray(parsed.utterance) 
+                ? parsed.utterance.join(' ') 
+                : (parsed.utterance || '');
+              
+              // Entferne die "erste Frage, die Sie als sehr wichtig wählen"-Nachricht
               const cleanedUtterance = utteranceStr
+                .replace(/Das ist Ihre (erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte)\.? Frage, die Sie als sehr wichtig wählen\.?\s*Das hilft uns, Ihre Prioritäten besser zu verstehen\.\s*/gi, '')
+                .replace(/Das ist Ihre \d+\.? Frage, die Sie als sehr wichtig wählen\.?\s*Das hilft uns, Ihre Prioritäten besser zu verstehen\.\s*/gi, '')
                 .replace(/Das ist Ihre (erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte)\.? Frage, die Sie als sehr wichtig wählen\.?\s*/gi, '')
                 .replace(/Das ist Ihre \d+\.? Frage, die Sie als sehr wichtig wählen\.?\s*/gi, '')
                 .trim();
               
-              const numberPrefix = `Das ist Ihre ${currentVeryImportantNumber}. Frage, die Sie als sehr wichtig wählen.\n\n`;
-              parsed.utterance = numberPrefix + (cleanedUtterance || `Warum ist ${cardTitle} so wichtig für Sie?`);
+              if (cleanedUtterance !== utteranceStr) {
+                parsed.utterance = cleanedUtterance || `Warum ist ${cardTitle} so wichtig für Sie?`;
+                console.log(`🧹 Phase 2: Entferne Phase-1-Nachricht "erste Frage, die Sie als sehr wichtig wählen" - verwende nur die Diskussionsfrage`);
+              }
+            } else {
+              // In Phase 1: Wenn die Nummer nicht korrekt erwähnt wird ODER eine falsche Nummer vorhanden ist, korrigiere
+              if (!hasCorrectNumber || hasWrongNumber) {
+                // Konvertiere utterance zu String, falls es ein Array ist
+                const utteranceStr = Array.isArray(parsed.utterance) 
+                  ? parsed.utterance.join(' ') 
+                  : (parsed.utterance || '');
+                
+                if (isFirstVeryImportant) {
+                  // Erste Frage: Verwende spezielle Formulierung
+                  parsed.utterance = `Das ist Ihre erste Frage, die Sie als sehr wichtig wählen. Das hilft uns, Ihre Prioritäten besser zu verstehen.\n\n${utteranceStr || `Warum ist ${cardTitle} so wichtig für Sie?`}`;
+                } else {
+                  // Alle weiteren: Füge die Nummer am Anfang hinzu
+                  // Entferne eventuell vorhandene falsche Nummernangaben
+                  const cleanedUtterance = utteranceStr
+                    .replace(/Das ist Ihre (erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte)\.? Frage, die Sie als sehr wichtig wählen\.?\s*/gi, '')
+                    .replace(/Das ist Ihre \d+\.? Frage, die Sie als sehr wichtig wählen\.?\s*/gi, '')
+                    .trim();
+                  
+                  const numberPrefix = `Das ist Ihre ${currentVeryImportantNumber}. Frage, die Sie als sehr wichtig wählen.\n\n`;
+                  parsed.utterance = numberPrefix + (cleanedUtterance || `Warum ist ${cardTitle} so wichtig für Sie?`);
+                }
+                console.log(`✨ Nummer ${currentVeryImportantNumber} zur utterance hinzugefügt für Karte ${parsed.card_id}`);
+              }
             }
-            console.log(`✨ Nummer ${currentVeryImportantNumber} zur utterance hinzugefügt für Karte ${parsed.card_id}`);
+            parsed.target_topic = currentTopic || parsed.target_topic;
           }
-          parsed.target_topic = currentTopic || parsed.target_topic;
+          }
         }
       } else {
         // User hat weder "wichtig" noch "sehr wichtig" gesagt, aber LLM hat very_important gesetzt
@@ -1326,10 +1744,25 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
         actionOptionsAnswered.has(parsed.card_id) && !discussionCompleted.has(parsed.card_id)) {
       console.log(`📋 Phase 2: Frage ${parsed.card_id} hat Handlungsoptionen beantwortet, fasse zusammen`);
       parsed.action = "summarize_topic";
-      // LLM sollte selbst formulieren, nur Fallback
+      
+      // WICHTIG: Das LLM sollte die Antworten aufnehmen und direkt zusammenfassen, OHNE die Frage zu wiederholen
+      // Die Zusammenfassung sollte direkt mit "Zu der Frage X habe ich von Ihnen gehört, dass..." beginnen
       if (isUtteranceEmpty(parsed.utterance)) {
         const card = CARDS.find(c => c.id === parsed.card_id);
-        parsed.utterance = `Lassen Sie mich zusammenfassen, was Sie zu der Frage "${card?.title || 'diesem Thema'}" formuliert haben.`;
+        parsed.utterance = `Zu der Frage "${card?.title || 'diesem Thema'}" habe ich von Ihnen gehört, dass... [Fasse hier die Antworten zusammen, OHNE die Frage zu wiederholen]. Ist diese Zusammenfassung für Sie so stimmig, oder möchten Sie etwas ergänzen oder korrigieren?`;
+      } else {
+        // Entferne eventuelle Fragenwiederholungen aus der Utterance
+        const utteranceStr = Array.isArray(parsed.utterance) 
+          ? parsed.utterance.join(' ') 
+          : (parsed.utterance || '');
+        
+        // Stelle sicher, dass die Zusammenfassung nicht die Frage wiederholt
+        // Wenn die Utterance mit "Zu der Frage" beginnt, ist sie bereits korrekt
+        if (!utteranceStr.toLowerCase().includes('zu der frage') && 
+            !utteranceStr.toLowerCase().includes('habe ich von ihnen gehört')) {
+          const card = CARDS.find(c => c.id === parsed.card_id);
+          parsed.utterance = `Zu der Frage "${card?.title || 'diesem Thema'}" habe ich von Ihnen gehört, dass ${utteranceStr}. Ist diese Zusammenfassung für Sie so stimmig, oder möchten Sie etwas ergänzen oder korrigieren?`;
+        }
       }
     }
     
@@ -1344,8 +1777,75 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
       }
     }
     
-    // Prüfe, ob User gerade eine Zusammenfassung bestätigt oder korrigiert hat
-    // (Die Logik wird durch den System-Prompt und Context gehandhabt)
+    // Phase 2: Nach Bestätigung der Zusammenfassung → automatisch zum nächsten sehr wichtigen Topic
+    // Prüfe, ob User gerade eine Zusammenfassung bestätigt hat
+    if (phase === 2 && lastUserMessage) {
+      const lastAssistantTurn = turns.slice().reverse().find(t => 
+        t.role === 'assistant' && 
+        t.action === 'summarize_topic' && 
+        t.card_id
+      );
+      
+      if (lastAssistantTurn) {
+        const userText = lastUserMessage.toLowerCase();
+        const isConfirmation = userText.includes('ja') || userText.includes('richtig') || userText.includes('korrekt') || 
+                               userText.includes('passt') || userText.includes('stimmt') || userText.includes('genau') ||
+                               userText.includes('zutreffend') || userText.includes('das stimmt') || 
+                               userText.includes('stimmt so') || userText.includes('korrekt so');
+        
+        // Prüfe, ob diese Zusammenfassung gerade bestätigt wurde
+        if (isConfirmation && summariesConfirmed.has(lastAssistantTurn.card_id) && parsed.action !== "wrap") {
+          // User hat gerade die Zusammenfassung bestätigt → wechsle zum nächsten sehr wichtigen Topic
+          const nextUndiscussedCard = veryImportantCards.find(vic => 
+            !summariesConfirmed.has(vic.card_id) && 
+            discussionCards.has(vic.card_id)
+          );
+          
+          if (nextUndiscussedCard) {
+            const card = CARDS.find(c => c.id === nextUndiscussedCard.card_id);
+            
+            // Prüfe, welcher Schritt als nächstes kommt
+            if (!followUpCardsAsked.has(nextUndiscussedCard.card_id)) {
+              // Noch keine follow_up_card gestellt → stelle sie
+              parsed.action = "follow_up_card";
+              parsed.card_id = nextUndiscussedCard.card_id;
+              parsed.utterance = `Warum ist ${card?.title || 'das'} so wichtig für Sie?`;
+              parsed.target_topic = card?.topic || "";
+              console.log(`✅ Phase 2: Zusammenfassung bestätigt → wechsle zu nächster sehr wichtiger Karte: ${nextUndiscussedCard.card_id} (follow_up_card)`);
+            } else if (!veryImportantWithReason.has(nextUndiscussedCard.card_id)) {
+              // follow_up_card gestellt, aber noch keine Antwort → warte (sollte nicht passieren)
+              console.log(`⏳ Phase 2: Warte noch auf Antwort zu follow_up_card für ${nextUndiscussedCard.card_id}`);
+            } else if (!actionOptionsAsked.has(nextUndiscussedCard.card_id)) {
+              // Grund bereits erfragt → frage nach Handlungsoptionen
+              parsed.action = "propose_action";
+              parsed.card_id = nextUndiscussedCard.card_id;
+              const examples = card?.example_actions?.slice(0, 3).join(', ') || 'verschiedene Möglichkeiten';
+              parsed.utterance = `Welche Handlungsoptionen wären für Sie hilfreich? Hier sind einige Beispiele, wie man damit umgehen kann: ${examples}.`;
+              parsed.target_topic = card?.topic || "";
+              console.log(`✅ Phase 2: Zusammenfassung bestätigt → wechsle zu nächster sehr wichtiger Karte: ${nextUndiscussedCard.card_id} (propose_action)`);
+            } else if (!actionOptionsAnswered.has(nextUndiscussedCard.card_id)) {
+              // Warte noch auf Antwort zu Handlungsoptionen
+              console.log(`⏳ Phase 2: Warte noch auf Antwort zu Handlungsoptionen für ${nextUndiscussedCard.card_id}`);
+            } else {
+              // Handlungsoptionen beantwortet → Zusammenfassung
+              parsed.action = "summarize_topic";
+              parsed.card_id = nextUndiscussedCard.card_id;
+              parsed.utterance = `Zu der Frage "${card?.title || 'diesem Thema'}" habe ich von Ihnen gehört, dass... [Fasse hier die Antworten zusammen, OHNE die Frage zu wiederholen]. Ist diese Zusammenfassung für Sie so stimmig, oder möchten Sie etwas ergänzen oder korrigieren?`;
+              parsed.target_topic = card?.topic || "";
+              console.log(`✅ Phase 2: Zusammenfassung bestätigt → wechsle zu nächster sehr wichtiger Karte: ${nextUndiscussedCard.card_id} (summarize_topic)`);
+            }
+          } else {
+            // Alle sehr wichtigen Karten wurden diskutiert → wrap
+            console.log(`✅ Phase 2: Alle sehr wichtigen Karten wurden diskutiert → wrap`);
+            if (parsed.action !== "wrap") {
+              parsed.action = "wrap";
+              parsed.card_id = "";
+              parsed.target_topic = "";
+            }
+          }
+        }
+      }
+    }
     
     // Unsure: Kurze Erklärung + Beispiel geben
     if (parsed.importance === "unsure" && parsed.card_id && parsed.card_id !== "") {
@@ -1390,11 +1890,166 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
     if (!parsed.navigation) parsed.navigation = "";
     if (typeof parsed.propose_action_now !== 'boolean') parsed.propose_action_now = false;
     
-    // Phase 1: Blockiere propose_action und wrap (nur in Phase 2/3 erlaubt)
-    if (phase === 1 && (parsed.action === "propose_action" || parsed.action === "wrap")) {
+    // Phase 1: Wenn mehr als 10 "sehr wichtige" Karten vorhanden sind, gehe sie automatisch durch
+    if (phase === 1 && allCardsAsked && veryImportantCount > maxVeryImportant) {
+      // Finde die nächste "sehr wichtige" Karte, die noch nicht neu bewertet wurde
+      // Wir gehen alle sehr wichtigen Karten der Reihe nach durch
+      const veryImportantCardIds = veryImportantCards.map(vic => vic.card_id);
+      const lastReviewedVeryImportant = turns.slice().reverse().find(t => 
+        t.role === 'assistant' && 
+        t.card_id && 
+        veryImportantCardIds.includes(t.card_id) &&
+        t.text && t.text.toLowerCase().includes('sehr wichtig')
+      );
+      
+      // Finde die nächste sehr wichtige Karte, die noch nicht neu bewertet wurde
+      let nextVeryImportantCard = null;
+      if (lastReviewedVeryImportant) {
+        const lastIndex = veryImportantCardIds.indexOf(lastReviewedVeryImportant.card_id);
+        if (lastIndex < veryImportantCardIds.length - 1) {
+          nextVeryImportantCard = CARDS.find(c => c.id === veryImportantCardIds[lastIndex + 1]);
+        } else {
+          // Alle durchgegangen, starte von vorne
+          nextVeryImportantCard = CARDS.find(c => c.id === veryImportantCardIds[0]);
+        }
+      } else {
+        // Noch keine neu bewertet, starte mit der ersten
+        nextVeryImportantCard = CARDS.find(c => c.id === veryImportantCardIds[0]);
+      }
+      
+      if (nextVeryImportantCard && parsed.action !== "ask_card") {
+        // Stelle die nächste sehr wichtige Frage
+        parsed.action = "ask_card";
+        parsed.card_id = nextVeryImportantCard.id;
+        parsed.utterance = nextVeryImportantCard.prompt;
+        parsed.target_topic = nextVeryImportantCard.topic;
+        console.log(`🔄 Phase 1: Mehr als ${maxVeryImportant} sehr wichtige Karten - gehe durch: ${nextVeryImportantCard.id}`);
+      }
+    }
+    
+    // Phase 1: KRITISCH - Wenn currentTopic gesetzt ist, muss das Thema vollständig durchgefragt werden
+    // Verhindere Wechsel zu anderen Themen oder present_topics, solange noch ungefragte Karten im aktuellen Thema existieren
+    if (phase === 1 && currentTopic && unaskedCards.length > 0) {
+      // Es gibt noch ungefragte Karten im aktuellen Thema
+      if (parsed.action === "present_topics" || (parsed.action === "ask_card" && parsed.target_topic && parsed.target_topic !== currentTopic)) {
+        console.log(`🚫 Phase 1: Blockiere Wechsel zu anderem Thema - ${unaskedCards.length} ungefragte Karten im aktuellen Thema ${currentTopic} verbleiben`);
+        // Erzwinge Fortsetzung im aktuellen Thema
+        const nextUnaskedCard = unaskedCards[0];
+        parsed.action = "ask_card";
+        parsed.card_id = nextUnaskedCard.id;
+        parsed.utterance = nextUnaskedCard.prompt;
+        parsed.target_topic = currentTopic;
+        console.log(`✅ Erzwinge ask_card für Karte ${nextUnaskedCard.id} im aktuellen Thema ${currentTopic}`);
+      }
+    }
+    
+    // Phase 1: Wenn currentTopic abgeschlossen ist (alle Karten gefragt), aber noch andere Themen offen sind
+    // Erzwinge present_topics oder Wechsel zum nächsten offenen Thema
+    if (phase === 1 && currentTopic && unaskedCards.length === 0 && completedTopics.has(currentTopic)) {
+      const remainingTopics = ['illness_care', 'practical', 'dignity', 'feelings'].filter(t => !completedTopics.has(t));
+      if (remainingTopics.length > 0) {
+        console.log(`✅ Thema ${currentTopic} ist abgeschlossen (alle Karten gefragt), aber noch ${remainingTopics.length} Themen offen: ${remainingTopics.join(', ')}`);
+        
+        // Wenn das LLM etwas anderes als present_topics oder ask_card für ein offenes Thema wählt, korrigiere es
+        if (parsed.action !== "present_topics" && parsed.action !== "ask_card") {
+          // Wenn es wrap oder ähnliches ist, ändere zu present_topics
+          if (parsed.action === "wrap" || parsed.action === "return_to_cards") {
+            console.log(`🚫 Phase 1: Blockiere ${parsed.action} - noch ${remainingTopics.length} Themen offen, ändere zu present_topics`);
+            parsed.action = "present_topics";
+            parsed.card_id = "";
+            parsed.target_topic = "";
+            
+            // Korrigiere die Utterance, wenn sie sagt, dass alle Themen durchgesprochen wurden
+            const utteranceText = Array.isArray(parsed.utterance) 
+              ? parsed.utterance.join(' ') 
+              : parsed.utterance;
+            const utteranceLower = String(utteranceText).toLowerCase();
+            
+            // Prüfe, ob die Utterance behauptet, dass alle Themen durchgesprochen wurden
+            const claimsAllTopicsDone = utteranceLower.includes('alle themen') || 
+                                       utteranceLower.includes('alle bereiche') ||
+                                       utteranceLower.includes('alle themenbereiche') ||
+                                       (utteranceLower.includes('durchgesprochen') && !utteranceLower.includes('noch')) ||
+                                       (utteranceLower.includes('abgeschlossen') && utteranceLower.includes('themen'));
+            
+            if (claimsAllTopicsDone || isUtteranceEmpty(parsed.utterance)) {
+              // Korrigiere die Utterance, um klar zu machen, dass noch Themen offen sind
+              parsed.utterance = `Gut, wir haben den Bereich "${topicNames[currentTopic] || currentTopic}" abgeschlossen. Es gibt noch ${remainingTopics.length} weitere ${remainingTopics.length === 1 ? 'Bereich' : 'Bereiche'}: ${remainingTopics.map(t => topicNames[t] || t).join(', ')}. Mit welchem Bereich möchten Sie fortfahren?`;
+              console.log(`✅ Korrigiere Utterance - noch ${remainingTopics.length} Themen offen`);
+            }
+          }
+        }
+        
+        // Wenn parsed.target_topic auf das gerade abgeschlossene Thema zeigt, aber noch andere Themen offen sind
+        // Korrigiere es, um zum nächsten offenen Thema zu wechseln
+        if (parsed.action === "ask_card" && parsed.target_topic === currentTopic) {
+          // Das aktuelle Thema ist abgeschlossen, aber LLM möchte eine Karte aus diesem Thema fragen
+          // Wechsle zum ersten offenen Thema
+          const nextOpenTopic = remainingTopics[0];
+          const nextTopicCards = CARDS.filter(c => c.topic === nextOpenTopic).sort((a, b) => (a.order || 0) - (b.order || 0));
+          const firstUnaskedCard = nextTopicCards.find(c => !askedCardIds.has(c.id));
+          
+          if (firstUnaskedCard) {
+            console.log(`🔄 Phase 1: Aktuelles Thema ${currentTopic} abgeschlossen, wechsle zu nächstem offenen Thema ${nextOpenTopic}, Karte ${firstUnaskedCard.id}`);
+            parsed.action = "ask_card";
+            parsed.card_id = firstUnaskedCard.id;
+            parsed.utterance = firstUnaskedCard.prompt;
+            parsed.target_topic = nextOpenTopic;
+            // Aktualisiere currentTopic für den nächsten Request
+            currentTopic = nextOpenTopic;
+          } else {
+            // Alle Karten des nächsten Themas wurden auch schon gefragt (sollte nicht passieren)
+            console.log(`⚠️ Phase 1: Alle Karten des nächsten Themas ${nextOpenTopic} wurden auch schon gefragt - verwende present_topics`);
+            parsed.action = "present_topics";
+            parsed.card_id = "";
+            parsed.target_topic = "";
+          }
+        }
+      }
+    }
+    
+    // Phase 1: Blockiere propose_action, wrap und summarize_topic (nur in Phase 2/3 erlaubt)
+    if (phase === 1 && (parsed.action === "propose_action" || parsed.action === "wrap" || parsed.action === "summarize_topic")) {
       console.log(`🚫 Phase 1: Blockiere ${parsed.action} - nicht erlaubt in Phase 1`);
+      // Wenn summarize_topic blockiert wird, wechsle zu ask_card für die nächste Frage oder present_topics
+      if (parsed.action === "summarize_topic") {
+        // Prüfe ob es noch ungefragte Fragen im aktuellen Thema gibt
+        if (currentTopic && unaskedCards.length > 0) {
+          parsed.action = "ask_card";
+          parsed.card_id = unaskedCards[0].id;
+          parsed.utterance = unaskedCards[0].prompt;
+          parsed.target_topic = currentTopic;
+          console.log(`🔄 Phase 1: Ändere summarize_topic zu ask_card für nächste Frage: ${unaskedCards[0].id}`);
+        } else if (currentTopic && unaskedCards.length === 0) {
+          // Alle Fragen des Themas wurden gestellt - Thema ist abgeschlossen
+          const remainingTopics = ['illness_care', 'practical', 'dignity', 'feelings'].filter(t => !completedTopics.has(t) || t === currentTopic);
+          
+          // Prüfe, ob es noch andere offene Themen gibt (außer dem aktuellen)
+          const otherOpenTopics = remainingTopics.filter(t => t !== currentTopic);
+          
+          if (otherOpenTopics.length > 0) {
+            // Es gibt noch andere offene Themen - biete diese an
+            parsed.action = "present_topics";
+            parsed.card_id = "";
+            parsed.target_topic = "";
+            console.log(`🔄 Phase 1: Ändere summarize_topic zu present_topics - Thema ${currentTopic} abgeschlossen, noch ${otherOpenTopics.length} offene Themen: ${otherOpenTopics.join(', ')}`);
+          } else {
+            // Alle Themen sind abgeschlossen - sollte nicht passieren, aber als Fallback
+            parsed.action = "present_topics";
+            parsed.card_id = "";
+            parsed.target_topic = "";
+            console.log(`🔄 Phase 1: Ändere summarize_topic zu present_topics - alle Themen abgeschlossen`);
+          }
+        } else {
+          // Kein aktives Thema - biete Themen an
+          parsed.action = "present_topics";
+          parsed.card_id = "";
+          parsed.target_topic = "";
+          console.log(`🔄 Phase 1: Ändere summarize_topic zu present_topics`);
+        }
+      }
       // Wenn propose_action blockiert wird, wechsle zu ask_card oder follow_up_card
-      if (parsed.action === "propose_action") {
+      else if (parsed.action === "propose_action") {
         // Prüfe ob es eine very_important Karte gibt, die noch keinen Grund hat
         if (parsed.card_id && veryImportantCards.some(vic => vic.card_id === parsed.card_id) && 
             !veryImportantWithReason.has(parsed.card_id)) {
@@ -1431,9 +2086,10 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
       // Das Thema wird beim nächsten Request als abgeschlossen erkannt, da wir es in den Turns tracken
     }
     
-    // Wenn present_topics aufgerufen wird, prüfe ob es noch nicht abgeschlossene ODER gestartete Themen gibt
+    // Wenn present_topics aufgerufen wird, prüfe ob es noch nicht abgeschlossene Themen gibt
     if (parsed.action === "present_topics") {
       // KRITISCH: Wenn ein Thema aktiv ist und noch ungefragte Karten existieren, verhindere present_topics
+      // Ein Thema muss vollständig durchgefragt werden, bevor ein anderes gestartet wird
       if (currentTopic && unaskedCards.length > 0) {
         console.log(`🚫 BLOCKIERE present_topics: Es gibt noch ${unaskedCards.length} ungefragte Karten im aktiven Thema ${currentTopic}. Frage diese zuerst!`);
         const nextUnaskedCard = unaskedCards[0];
@@ -1444,66 +2100,24 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
         console.log(`✅ Geändert zu ask_card für Karte ${nextUnaskedCard.id}`);
       }
       
-      // Biete nur Themen an, die weder abgeschlossen noch bereits gestartet wurden
+      // Bei present_topics: Zeige nur nicht abgeschlossene Themen an
+      // Ein Thema wird nur als abgeschlossen markiert, wenn ALLE Fragen gestellt wurden
       const availableTopics = ['illness_care', 'practical', 'dignity', 'feelings'].filter(t => 
-        !completedTopics.has(t) && !startedTopics.has(t)
+        !completedTopics.has(t)
       );
       
-      console.log(`📋 present_topics: availableTopics=${availableTopics.join(', ')}, startedTopics=${Array.from(startedTopics).join(', ')}, completedTopics=${Array.from(completedTopics).join(', ')}, currentTopic=${currentTopic}, unaskedCards.length=${unaskedCards.length}`);
+      console.log(`📋 present_topics: availableTopics=${availableTopics.join(', ')}, completedTopics=${Array.from(completedTopics).join(', ')}, currentTopic=${currentTopic}, unaskedCards.length=${unaskedCards.length}`);
       
       if (availableTopics.length === 0) {
-        // Alle Themen sind entweder abgeschlossen oder bereits gestartet
-        // Prüfe, ob es gestartete aber nicht abgeschlossene Themen gibt
-        const startedButNotCompleted = ['illness_care', 'practical', 'dignity', 'feelings'].filter(t => 
-          startedTopics.has(t) && !completedTopics.has(t)
-        );
-        
-        if (startedButNotCompleted.length > 0) {
-          // Es gibt gestartete Themen, die noch nicht abgeschlossen sind - fahre mit dem ersten fort
-          const topicToContinue = startedButNotCompleted[0];
-          const topicCards = CARDS.filter(c => c.topic === topicToContinue).sort((a, b) => (a.order || 0) - (b.order || 0));
-          const askedCardIdsForTopic = new Set();
-          turns.forEach(turn => {
-            if (turn.card_id) {
-              const card = CARDS.find(c => c.id === turn.card_id);
-              if (card && card.topic === topicToContinue) {
-                askedCardIdsForTopic.add(turn.card_id);
-              }
-            }
-          });
-          const nextUnaskedCard = topicCards.find(c => !askedCardIdsForTopic.has(c.id));
-          
-          if (nextUnaskedCard) {
-            console.log(`📋 Keine neuen Themen verfügbar, fahre mit gestartetem Thema ${topicToContinue} fort: ${nextUnaskedCard.id}`);
-            parsed.action = "ask_card";
-            parsed.card_id = nextUnaskedCard.id;
-            // LLM sollte selbst formulieren, nur Fallback wenn utterance leer
-            if (isUtteranceEmpty(parsed.utterance)) {
-              parsed.utterance = nextUnaskedCard.prompt;
-            }
-            parsed.target_topic = topicToContinue;
-          } else {
-            // Alle Karten des gestarteten Themas wurden gefragt, aber nicht abgeschlossen
-            console.log(`✅ Alle Themen wurden abgeschlossen oder alle Karten wurden gefragt. Wechsle zu wrap.`);
-            parsed.action = "wrap";
-            // LLM sollte selbst formulieren, nur Fallback wenn utterance leer
-            if (isUtteranceEmpty(parsed.utterance)) {
-              parsed.utterance = "Wir haben alle Themenbereiche durchgesprochen. Vielen Dank für Ihre Offenheit und die Zeit, die Sie sich genommen haben.\n\nSie können nun eine PDF-Zusammenfassung Ihrer Reflexion herunterladen, indem Sie auf den Button unten klicken.";
-            }
-            parsed.target_topic = "";
-            parsed.card_id = "";
-          }
-        } else {
-          // Alle Themen sind abgeschlossen
-          console.log(`✅ Alle Themen wurden abgeschlossen. Wechsle zu wrap.`);
-          parsed.action = "wrap";
-          // LLM sollte selbst formulieren, nur Fallback wenn utterance leer
-          if (isUtteranceEmpty(parsed.utterance)) {
-            parsed.utterance = "Wir haben alle Themenbereiche durchgesprochen. Vielen Dank für Ihre Offenheit und die Zeit, die Sie sich genommen haben.\n\nSie können nun eine PDF-Zusammenfassung Ihrer Reflexion herunterladen, indem Sie auf den Button unten klicken.";
-          }
-          parsed.target_topic = "";
-          parsed.card_id = "";
+        // Alle Themen sind abgeschlossen
+        console.log(`✅ Alle Themen wurden abgeschlossen. Wechsle zu wrap.`);
+        parsed.action = "wrap";
+        // LLM sollte selbst formulieren, nur Fallback wenn utterance leer
+        if (isUtteranceEmpty(parsed.utterance)) {
+          parsed.utterance = "Wir haben alle Themenbereiche durchgesprochen. Vielen Dank für Ihre Offenheit und die Zeit, die Sie sich genommen haben.\n\nSie können nun eine PDF-Zusammenfassung Ihrer Reflexion herunterladen, indem Sie auf den Button unten klicken.";
         }
+        parsed.target_topic = "";
+        parsed.card_id = "";
       } else {
         // Es gibt noch verfügbare Themen - LLM sollte selbst formulieren
         // Nur Warnung wenn LLM abgeschlossene/gestartete Themen erwähnt
@@ -1519,27 +2133,48 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
           'feelings': ['gefühle', 'beziehungen', 'verbundenheit']
         };
         
+        // Prüfe nur, ob LLM abgeschlossene Themen erwähnt (gestartete Themen sind erlaubt bei present_topics)
         ['illness_care', 'practical', 'dignity', 'feelings'].forEach(topic => {
-          if ((completedTopics.has(topic) || startedTopics.has(topic)) && !availableTopics.includes(topic)) {
+          if (completedTopics.has(topic) && !availableTopics.includes(topic)) {
             const keywords = topicKeywords[topic] || [];
             if (keywords.some(kw => utteranceLower.includes(kw))) {
-              console.log(`⚠️ Warnung: LLM erwähnt ${topic} in present_topics, obwohl es bereits ${completedTopics.has(topic) ? 'abgeschlossen' : 'gestartet'} ist.`);
+              console.log(`⚠️ Warnung: LLM erwähnt ${topic} in present_topics, obwohl es bereits abgeschlossen ist.`);
             }
           }
         });
         
-        console.log(`📋 present_topics: Verfügbare Themen: ${availableTopics.join(', ')} (gestartet: ${Array.from(startedTopics).join(', ')}, abgeschlossen: ${Array.from(completedTopics).join(', ')})`);
+        console.log(`📋 present_topics: Verfügbare Themen: ${availableTopics.join(', ')} (abgeschlossen: ${Array.from(completedTopics).join(', ')})`);
       }
     }
     
     // Warnung statt Override: LLM sollte selbst korrekt present_topics verwenden
     if (parsed.action === "present_topics") {
       const allTopics = ['illness_care', 'practical', 'dignity', 'feelings'];
-      const trulyAvailable = allTopics.filter(t => !completedTopics.has(t) && !startedTopics.has(t));
+      const trulyAvailable = allTopics.filter(t => !completedTopics.has(t));
       
       if (trulyAvailable.length === 0) {
-        console.log(`⚠️ Warnung: present_topics gewählt, aber keine neuen Themen verfügbar (alle gestartet/abgeschlossen).`);
-        // Kein Override - LLM sollte selbst zu wrap oder ask_card wechseln
+        console.log(`⚠️ Warnung: present_topics gewählt, aber alle Themen sind abgeschlossen.`);
+        // Kein Override - LLM sollte selbst zu wrap wechseln
+      } else {
+        console.log(`✅ present_topics: ${trulyAvailable.length} Themen verfügbar`);
+      }
+    }
+    
+    // Phase 1: KRITISCH - Wenn ask_card verwendet wird, aber target_topic nicht mit currentTopic übereinstimmt
+    // und currentTopic noch ungefragte Karten hat, korrigiere target_topic
+    if (phase === 1 && parsed.action === "ask_card" && currentTopic && unaskedCards.length > 0) {
+      if (parsed.target_topic && parsed.target_topic !== currentTopic) {
+        console.log(`🚫 Phase 1: ask_card mit falschem target_topic (${parsed.target_topic} statt ${currentTopic}) - korrigiere`);
+        // Stelle sicher, dass die nächste Karte aus dem aktuellen Thema kommt
+        const nextUnaskedCard = unaskedCards[0];
+        parsed.card_id = nextUnaskedCard.id;
+        parsed.utterance = nextUnaskedCard.prompt;
+        parsed.target_topic = currentTopic;
+        console.log(`✅ Korrigiert zu ask_card für Karte ${nextUnaskedCard.id} im aktuellen Thema ${currentTopic}`);
+      } else if (!parsed.target_topic || parsed.target_topic === "") {
+        // target_topic ist leer, setze es auf currentTopic
+        parsed.target_topic = currentTopic;
+        console.log(`✅ Setze target_topic auf currentTopic: ${currentTopic}`);
       }
     }
     
@@ -1567,6 +2202,54 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
     // Entferne "[Karte: ...]" Tags aus der utterance, falls das LLM sie hinzugefügt hat
     if (parsed.utterance) {
       parsed.utterance = cleanUtterance(parsed.utterance, (u) => u.replace(/\s*\[Karte:\s*[^\]]+\]/gi, '').trim());
+    }
+    
+    // KRITISCH: In Phase 1 prüfe, ob die Utterance fälschlicherweise sagt, dass alle Themen durchgesprochen wurden
+    if (phase === 1 && !phase1Complete && parsed.utterance && completedTopics.size < 4) {
+      const utteranceText = Array.isArray(parsed.utterance) 
+        ? parsed.utterance.join(' ') 
+        : parsed.utterance;
+      const utteranceLower = String(utteranceText).toLowerCase();
+      
+      // Prüfe, ob die Utterance behauptet, dass alle Themen durchgesprochen wurden
+      const falseClaims = [
+        'alle themen durchgesprochen',
+        'alle bereiche angeschaut',
+        'alle themenbereiche',
+        'alle themen durchgedacht',
+        'alle themen einmal',
+        'alle fragen durchgesprochen',
+        'alle fragen einmal'
+      ];
+      
+      const claimsAllDone = falseClaims.some(claim => utteranceLower.includes(claim));
+      
+      if (claimsAllDone) {
+        console.log(`⚠️ [UTTERANCE CHECK] LLM behauptet fälschlicherweise, dass alle Themen durchgesprochen wurden - korrigiere`);
+        const remainingTopics = ['illness_care', 'practical', 'dignity', 'feelings'].filter(t => !completedTopics.has(t));
+        
+        // Korrigiere die Utterance, um klar zu machen, dass noch Themen offen sind
+        if (parsed.action === "present_topics" || parsed.action === "return_to_cards") {
+          parsed.utterance = `Gut, wir haben ${completedTopics.size} ${completedTopics.size === 1 ? 'Bereich' : 'Bereiche'} abgeschlossen. Es gibt noch ${remainingTopics.length} weitere ${remainingTopics.length === 1 ? 'Bereich' : 'Bereiche'}: ${remainingTopics.map(t => topicNames[t] || t).join(', ')}. Mit welchem Bereich möchten Sie fortfahren?`;
+          parsed.action = "present_topics";
+          parsed.card_id = "";
+          parsed.target_topic = "";
+          console.log(`✅ Korrigiere Utterance - noch ${remainingTopics.length} Themen offen: ${remainingTopics.join(', ')}`);
+        } else if (parsed.action === "ask_card" && remainingTopics.length > 0) {
+          // Wenn ask_card für ein abgeschlossenes Thema, wechsle zum nächsten offenen Thema
+          const nextOpenTopic = remainingTopics[0];
+          const nextTopicCards = CARDS.filter(c => c.topic === nextOpenTopic).sort((a, b) => (a.order || 0) - (b.order || 0));
+          const firstUnaskedCard = nextTopicCards.find(c => !askedCardIds.has(c.id));
+          
+          if (firstUnaskedCard) {
+            parsed.action = "ask_card";
+            parsed.card_id = firstUnaskedCard.id;
+            parsed.utterance = firstUnaskedCard.prompt;
+            parsed.target_topic = nextOpenTopic;
+            console.log(`✅ Korrigiere zu ask_card für nächste offene Thema ${nextOpenTopic}, Karte ${firstUnaskedCard.id}`);
+          }
+        }
+      }
     }
     
     // KRITISCH: In Phase 1 entferne alle Erwähnungen von "Bei der Frage...", "Zu der Frage..." etc.
@@ -1615,7 +2298,115 @@ ${Array.from(actionOptionsByCard.entries()).length > 0 ? Array.from(actionOption
       }
     }
     
-    console.log('📤 Sende Response:', { action: parsed.action, card_id: parsed.card_id, target_topic: parsed.target_topic, importance: parsed.importance, auto_show_card: parsed.auto_show_card, completedTopics: Array.from(completedTopics) });
+    // KRITISCH: Prüfe, ob eine ask_card Utterance auch eine Pause-Frage enthält
+    // Wenn ja, entferne die Pause-Frage aus der utterance, da sie nicht mit einer Topic-Frage kombiniert werden darf
+    if (parsed.action === "ask_card" && parsed.utterance) {
+      const utteranceText = Array.isArray(parsed.utterance) 
+        ? parsed.utterance.join(' ') 
+        : parsed.utterance;
+      const utteranceLower = utteranceText.toLowerCase();
+      
+      // Prüfe auf Pause-Fragen
+      const pauseKeywords = [
+        'pause machen',
+        'pause',
+        'unterbrechen',
+        'stopp',
+        'fortschritt exportieren',
+        'fortschritt speichern',
+        'später fortfahren',
+        'möchten sie eine pause',
+        'wollen sie eine pause',
+        'können sie eine pause',
+        'möchten sie kurz eine pause',
+        'wollen sie kurz eine pause'
+      ];
+      
+      const containsPauseQuestion = pauseKeywords.some(keyword => utteranceLower.includes(keyword));
+      
+      if (containsPauseQuestion) {
+        console.log(`⚠️ [PAUSE CHECK] ask_card utterance enthält Pause-Frage - entferne sie`);
+        
+        // Wenn utterance ein Array ist, entferne Elemente, die Pause-Fragen enthalten
+        if (Array.isArray(parsed.utterance)) {
+          const cleanedArray = parsed.utterance.filter(text => {
+            const textLower = String(text).toLowerCase();
+            return !pauseKeywords.some(keyword => textLower.includes(keyword));
+          });
+          
+          if (cleanedArray.length > 0) {
+            parsed.utterance = cleanedArray.length === 1 ? cleanedArray[0] : cleanedArray;
+            console.log(`✅ [PAUSE CHECK] Pause-Frage aus Array entfernt, verbleibende Elemente: ${cleanedArray.length}`);
+          } else {
+            // Alle Elemente waren Pause-Fragen - behalte nur die Topic-Frage (falls vorhanden)
+            // Fallback: Verwende die card prompt
+            const card = CARDS.find(c => c.id === parsed.card_id);
+            if (card) {
+              parsed.utterance = card.prompt;
+              console.log(`✅ [PAUSE CHECK] Alle Elemente waren Pause-Fragen - verwende card.prompt als Fallback`);
+            }
+          }
+        } else {
+          // Utterance ist ein String - entferne Pause-Fragen-Teile
+          // Versuche, die Topic-Frage zu extrahieren (alles vor der Pause-Frage)
+          let cleaned = String(parsed.utterance);
+          
+          // Finde die Position der ersten Pause-Frage
+          let pauseStartIndex = -1;
+          for (const keyword of pauseKeywords) {
+            const index = cleaned.toLowerCase().indexOf(keyword);
+            if (index !== -1 && (pauseStartIndex === -1 || index < pauseStartIndex)) {
+              pauseStartIndex = index;
+            }
+          }
+          
+          if (pauseStartIndex !== -1) {
+            // Entferne alles ab der Pause-Frage
+            cleaned = cleaned.substring(0, pauseStartIndex).trim();
+            
+            // Entferne auch Satzzeichen am Ende, die auf eine Pause-Frage hinweisen könnten
+            cleaned = cleaned.replace(/[.,;:]\s*$/, '').trim();
+            
+            if (cleaned.length > 0) {
+              parsed.utterance = cleaned;
+              console.log(`✅ [PAUSE CHECK] Pause-Frage aus String entfernt`);
+            } else {
+              // Der gesamte String war eine Pause-Frage - verwende card.prompt als Fallback
+              const card = CARDS.find(c => c.id === parsed.card_id);
+              if (card) {
+                parsed.utterance = card.prompt;
+                console.log(`✅ [PAUSE CHECK] String war nur Pause-Frage - verwende card.prompt als Fallback`);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // KRITISCH: Wenn Phase 1 abgeschlossen ist und das LLM eine Phase 2 Aktion zurückgibt,
+    // wechsle automatisch zu Phase 2 (auch ohne explizite User-Bestätigung, wenn LLM es bereits tut)
+    // Diese Prüfung erfolgt NACH dem Parsing der LLM-Response und allen anderen Validierungen,
+    // damit parsed.action verfügbar ist und alle Bedingungen geprüft werden können
+    if (parsed && parsed.action) {
+      const isPhase2Action = parsed.action === "follow_up_card" || 
+                             parsed.action === "propose_action" || 
+                             parsed.action === "summarize_topic";
+      
+      if (phase1Complete && phase === 1 && isPhase2Action && veryImportantCount > 0 && veryImportantCount <= maxVeryImportant) {
+        // Phase 1 ist abgeschlossen, LLM gibt Phase 2 Aktion zurück → automatischer Wechsel zu Phase 2
+        phase = 2;
+        console.log(`✅ [AUTO-PHASE-2] Phase 1 abgeschlossen - LLM gibt Phase 2 Aktion (${parsed.action}) zurück → automatischer Wechsel zu Phase 2 (${veryImportantCount} sehr wichtige Karten)`);
+      }
+    }
+    
+    // Füge phase immer zum Response hinzu
+    parsed.phase = phase;
+    const previousPhase = req.body?.phase || req.body?.conversation?.phase || 1;
+    if (phase !== previousPhase) {
+      console.log(`📤 Phase geändert: ${previousPhase} → ${phase}`);
+    }
+    
+    console.log('📤 Sende Response:', { action: parsed.action, card_id: parsed.card_id, target_topic: parsed.target_topic, importance: parsed.importance, auto_show_card: parsed.auto_show_card, completedTopics: Array.from(completedTopics), phase: parsed.phase });
     res.json(parsed);
 
   } catch (err) {
@@ -1993,37 +2784,20 @@ app.post('/api/export/pdf', async (req, res) => {
     
     // Analysiere Conversation
     const veryImportantReasons = new Map(); // Map von card_id zu Begründung
-    const veryImportantCardIds = new Set(); // Set von card_ids, die als very_important markiert wurden
+    const veryImportantCardIds = new Set(); // Set von card_ids, die aktuell als very_important markiert sind
     const summariesByCard = new Map(); // card_id -> summarize_topic Text (neutrale Zusammenfassungen)
     const actionOptionsByCard = new Map(); // card_id -> { question, answer, card_title }
     
-    // Zuerst: Identifiziere alle Karten, die als very_important markiert wurden
-    turns.forEach((turn, index) => {
-      if (turn.role === 'assistant' && turn.card_id) {
-        // Prüfe, ob importance explizit gesetzt wurde
-        if (turn.importance === 'very_important') {
-          veryImportantCardIds.add(turn.card_id);
-        }
-        // Prüfe auch den Text
-        const textLower = turn.text.toLowerCase();
-        if (textLower.includes('sehr wichtig') || textLower.includes('very important')) {
-          veryImportantCardIds.add(turn.card_id);
-        }
-      }
-      // Prüfe auch User-Antworten
-      if (turn.role === 'user' && index > 0) {
-        const prevTurn = turns[index - 1];
-        if (prevTurn && prevTurn.role === 'assistant' && prevTurn.card_id) {
-          const userText = turn.text.toLowerCase();
-          if (userText.includes('sehr wichtig') || userText.includes('extrem wichtig') || 
-              userText.includes('außerordentlich wichtig') || userText.includes('besonders wichtig')) {
-            veryImportantCardIds.add(prevTurn.card_id);
-          }
-        }
+    const currentImportanceByCard = buildCurrentCardImportanceState(turns);
+    currentImportanceByCard.forEach((importance, cardId) => {
+      if (importance === 'very_important') {
+        veryImportantCardIds.add(cardId);
       }
     });
     
-    // Extrahiere Begründungen für very_important Themen
+    console.log(`📊 PDF Export: ${veryImportantCardIds.size} wirklich als "sehr wichtig" markierte Karten: ${Array.from(veryImportantCardIds).join(', ')}`);
+    
+    // Extrahiere Begründungen für very_important Themen und ALLE Handlungsmöglichkeiten
     turns.forEach((turn, index) => {
       if (turn.role === 'assistant' && turn.card_id) {
         const textLower = turn.text.toLowerCase();
@@ -2042,13 +2816,45 @@ app.post('/api/export/pdf', async (req, res) => {
         }
         
         // Prüfe auf Handlungsoptionen (propose_action)
+        // KRITISCH: Sammle ALLE Handlungsoptionen, auch wenn sie mehrfach gefragt wurden
+        // WICHTIG: Sammle ALLE Antworten, nicht nur die erste
         if (turn.action === 'propose_action' && turn.card_id) {
           const nextUserTurn = turns.slice(index + 1).find(t => t.role === 'user');
-          actionOptionsByCard.set(turn.card_id, {
-            question: turn.text,
-            answer: nextUserTurn?.text || null,
-            card_title: CARDS.find(c => c.id === turn.card_id)?.title || turn.card_id
-          });
+          const answer = nextUserTurn?.text || null;
+          const card_title = CARDS.find(c => c.id === turn.card_id)?.title || turn.card_id;
+          
+          // Nur wenn eine Antwort vorhanden ist, speichere sie
+          if (answer && answer.trim().length > 0) {
+            // Wenn bereits eine Handlungsoption für diese card_id vorhanden ist, füge die neue hinzu
+            if (actionOptionsByCard.has(turn.card_id)) {
+              const existing = actionOptionsByCard.get(turn.card_id);
+              // Wenn mehrere Antworten vorhanden sind, sammle sie alle
+              if (existing.answer && existing.answer.trim().length > 0) {
+                // Füge die neue Antwort hinzu (wenn sie unterschiedlich ist)
+                if (!existing.answer.includes(answer)) {
+                  actionOptionsByCard.set(turn.card_id, {
+                    question: existing.question || turn.text,
+                    answer: existing.answer + (existing.answer.endsWith('.') || existing.answer.endsWith('!') || existing.answer.endsWith('?') ? ' ' : '. ') + answer,
+                    card_title: existing.card_title || card_title
+                  });
+                }
+              } else {
+                // Vorher keine Antwort, jetzt eine vorhanden
+                actionOptionsByCard.set(turn.card_id, {
+                  question: existing.question || turn.text,
+                  answer: answer,
+                  card_title: existing.card_title || card_title
+                });
+              }
+            } else {
+              // Neue Handlungsoption für diese card_id
+              actionOptionsByCard.set(turn.card_id, {
+                question: turn.text,
+                answer: answer,
+                card_title: card_title
+              });
+            }
+          }
         }
         
         // Prüfe auf neutrale Zusammenfassungen (summarize_topic)

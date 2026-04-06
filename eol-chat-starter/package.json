@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run smoke",
     "start": "npm run dev",
     "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,yellow\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "node Backend/server.mjs",
@@ -12,7 +12,10 @@
     "build": "cd frontend && npm run build",
     "build:start": "npm run build && npm run start:prod",
     "start:prod": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,yellow\" \"npm run dev:backend\" \"npm run start:frontend\"",
-    "start:frontend": "npm run start --prefix frontend"
+    "start:frontend": "npm run start --prefix frontend",
+    "smoke": "npm run smoke:backend && npm run smoke:package",
+    "smoke:backend": "node smoke-backend.mjs",
+    "smoke:package": "node smoke-package.mjs"
   },
   "keywords": [],
   "author": "",

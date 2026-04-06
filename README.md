@@ -59,7 +59,7 @@ Rather than focusing on end-of-life counseling, this work aims to create an **ea
 | **LLM Core** | A GPT-based or LLaMA-based model configured for open-ended reflection dialogue. |
 | **Prompt Layer** | Custom prompt structure to elicit values-oriented and neutral conversation. |
 | **Frontend Prototype** | Simple chat or voice interface for guided interaction. |
-| **Technical Modules used:** | Next.js (React), Tailwind CSS, FastAPI, OpenAI Whisper (Speech Encoding/Decoding) |
+| **Technical Modules used:** | Next.js (React), Tailwind CSS, Node.js/Express backend, OpenAI API |
 | **Evaluation Framework** | Metrics for usability (SUS), emotional impact, and ethical safety. |
 
 ---
@@ -95,6 +95,8 @@ npm start
 The application will be available at:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8787
+
+To create a tester-ready archive, run `.\package-for-testing.ps1` inside `eol-chat-starter`.
 
 ### Development Setup
 
