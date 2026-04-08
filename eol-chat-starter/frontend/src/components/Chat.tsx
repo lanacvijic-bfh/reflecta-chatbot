@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // API Base URL - verwendet Umgebungsvariable oder fällt auf localhost zurück
 const getApiBaseUrl = (): string => {
@@ -72,12 +72,6 @@ function hasSafetyRisk(text: string): boolean {
 }
 
 
-type ConsoleLog = {
-  type: 'log' | 'warn' | 'error' | 'info';
-  message: string;
-  timestamp: number;
-};
-
 type ChatProps = {
   onImportExportReady?: (handlers: { handleImportJSON: () => void; handleExportJSON: () => void }) => void;
 };
@@ -88,7 +82,6 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
   const [inputValue, setInputValue] = useState<string>("");
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
   const [isThinking, setIsThinking] = useState<boolean>(false);
   const chatRef = useRef<HTMLDivElement | null>(null);
   
@@ -136,110 +129,6 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
   }, [loadCardById]);
   
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
-  const originalConsoleRef = useRef<{
-    log: typeof console.log;
-    warn: typeof console.warn;
-    error: typeof console.error;
-    info: typeof console.info;
-  } | null>(null);
-  const isInterceptedRef = useRef<boolean>(false);
-  const logsBufferRef = useRef<ConsoleLog[]>([]);
-  const updateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const flushLogsRef = useRef<(() => void) | null>(null);
-
-  // Funktion zum Batch-Update der Logs (außerhalb des useEffect, damit sie überall verfügbar ist)
-  const flushLogs = useCallback(() => {
-    if (logsBufferRef.current.length > 0) {
-      setConsoleLogs(prev => {
-        const combined = [...prev, ...logsBufferRef.current];
-        logsBufferRef.current = [];
-        // Behalte nur die letzten 100 Logs
-        return combined.slice(-100);
-      });
-    }
-  }, []);
-
-  // Console-Logs intercepten und sammeln
-  useEffect(() => {
-    // Verhindere mehrfache Interception
-    if (isInterceptedRef.current) return;
-    
-    // Speichere originale Console-Methoden
-    if (!originalConsoleRef.current) {
-      originalConsoleRef.current = {
-        log: console.log.bind(console),
-        warn: console.warn.bind(console),
-        error: console.error.bind(console),
-        info: console.info.bind(console),
-      };
-    }
-
-    const original = originalConsoleRef.current;
-    
-    // Speichere flushLogs-Referenz
-    flushLogsRef.current = flushLogs;
-
-    // Überschreibe Console-Methoden
-    const interceptConsole = (type: ConsoleLog['type']) => {
-      return (...args: any[]) => {
-        // Rufe originale Methode auf (für Browser-Console)
-        if (original[type]) {
-          original[type](...args);
-        }
-        
-        // Sammle Log im Buffer (ohne sofortigen State-Update)
-        const message = args.map(arg => {
-          if (typeof arg === 'object') {
-            try {
-              return JSON.stringify(arg, null, 2);
-            } catch {
-              return String(arg);
-            }
-          }
-          return String(arg);
-        }).join(' ');
-        
-        logsBufferRef.current.push({ type, message, timestamp: Date.now() });
-        
-        // Batch-Update: Warte 50ms, bevor State aktualisiert wird (kürzer für bessere UX)
-        if (updateTimerRef.current) {
-          clearTimeout(updateTimerRef.current);
-        }
-        updateTimerRef.current = setTimeout(() => {
-          if (flushLogsRef.current) {
-            flushLogsRef.current();
-          }
-        }, 50);
-      };
-    };
-
-    console.log = interceptConsole('log');
-    console.warn = interceptConsole('warn');
-    console.error = interceptConsole('error');
-    console.info = interceptConsole('info');
-    
-    isInterceptedRef.current = true;
-    
-    // Test-Log, um zu bestätigen, dass die Interception funktioniert
-    console.log('🔧 Console-Interception aktiviert - Logs werden jetzt gesammelt');
-
-    // Cleanup: Stelle originale Console-Methoden wieder her
-    return () => {
-      if (updateTimerRef.current) {
-        clearTimeout(updateTimerRef.current);
-      }
-      if (flushLogsRef.current) {
-        flushLogsRef.current(); // Flushe verbleibende Logs
-      }
-      if (originalConsoleRef.current) {
-        console.log = originalConsoleRef.current.log;
-        console.warn = originalConsoleRef.current.warn;
-        console.error = originalConsoleRef.current.error;
-        console.info = originalConsoleRef.current.info;
-        isInterceptedRef.current = false;
-      }
-    };
-  }, [flushLogs]);
 
   // Debug: Log selectedCard changes
   useEffect(() => {
@@ -648,132 +537,6 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, conversation.turns.length]); // Nur wenn sich die Anzahl ändert, nicht das gesamte Array
 
-  const debugState = useMemo(() => {
-    // Nutze den AKTUELLEN Importance-Status pro Karte (nicht historisch),
-    // damit Downgrades im Debug korrekt angezeigt werden.
-    const inferImportanceFromUserText = (text: string): string | null => {
-      const userText = (text || "").toLowerCase();
-      if (!userText) return null;
-      if (
-        userText.includes("nicht mehr sehr wichtig") ||
-        userText.includes("nicht so wichtig") ||
-        userText.includes("weniger wichtig") ||
-        userText.includes("nicht wichtig") ||
-        userText.includes("unwichtig")
-      ) {
-        return "not_important";
-      }
-      if (
-        userText.includes("sehr wichtig") ||
-        userText.includes("extrem wichtig") ||
-        userText.includes("außerordentlich wichtig") ||
-        userText.includes("besonders wichtig")
-      ) {
-        return "very_important";
-      }
-      if (userText.includes("wichtig")) return "important";
-      if (userText.includes("unsicher") || userText.includes("ich weiß nicht") || userText.includes("ich weiss nicht")) {
-        return "unsure";
-      }
-      return null;
-    };
-
-    const currentImportanceByCardId = new Map<string, string>();
-    conversation.turns.forEach((turn, index) => {
-      if (
-        turn.role === "assistant" &&
-        turn.card_id &&
-        typeof turn.importance === "string" &&
-        turn.importance.trim() !== ""
-      ) {
-        currentImportanceByCardId.set(turn.card_id, turn.importance);
-      }
-
-      if (turn.role === "user" && index > 0) {
-        const inferred = inferImportanceFromUserText(turn.text);
-        if (!inferred) return;
-
-        for (let i = index - 1; i >= 0; i--) {
-          const prevTurn = conversation.turns[i];
-          if (prevTurn && prevTurn.role === "assistant" && prevTurn.card_id) {
-            currentImportanceByCardId.set(prevTurn.card_id, inferred);
-            break;
-          }
-        }
-      }
-    });
-
-    const veryImportantCardIds = Array.from(currentImportanceByCardId.entries())
-      .filter(([, importance]) => importance === "very_important")
-      .map(([cardId]) => cardId);
-    
-    // Finde aktuelle Phase 2 Diskussion
-    let phase2CurrentDiscussionTopic = null;
-    let phase2CurrentSummary = null;
-    let phase2CurrentAction = null;
-    
-    if (conversation.phase === 2) {
-      // Finde die letzte Assistant-Nachricht mit action
-      const lastAssistantTurn = [...conversation.turns].reverse().find(t => t.role === 'assistant');
-      if (lastAssistantTurn) {
-        phase2CurrentAction = lastAssistantTurn.action || null;
-        
-        // Finde das aktuelle Diskussionsthema (card_id der letzten relevanten Nachricht)
-        const lastRelevantTurn = [...conversation.turns].reverse().find(t => 
-          t.role === 'assistant' && 
-          (t.action === 'follow_up_card' || t.action === 'propose_action' || t.action === 'summarize_topic') &&
-          t.card_id
-        );
-        if (lastRelevantTurn && lastRelevantTurn.card_id) {
-          const card = cards.find(c => c.id === lastRelevantTurn.card_id);
-          phase2CurrentDiscussionTopic = card ? card.title : lastRelevantTurn.card_id;
-        }
-        
-        // Finde die letzte Zusammenfassung
-        const lastSummaryTurn = [...conversation.turns].reverse().find(t => 
-          t.role === 'assistant' && t.action === 'summarize_topic'
-        );
-        if (lastSummaryTurn) {
-          phase2CurrentSummary = Array.isArray(lastSummaryTurn.text) 
-            ? lastSummaryTurn.text.join(' ') 
-            : lastSummaryTurn.text;
-        }
-      }
-    }
-    
-    const state = {
-      phase1: conversation.phase === 1,
-      phase2: conversation.phase === 2,
-      phase: conversation.phase, // Hinzufügen der Phase direkt für besseres Debugging
-      activeTopic: conversation.activeTopic,
-      veryImportantCount: veryImportantCardIds.length,
-      veryImportantCardIds,
-      ...(conversation.phase === 2 ? {
-        phase2Details: {
-          currentDiscussionTopic: phase2CurrentDiscussionTopic,
-          summary: phase2CurrentSummary,
-          action: phase2CurrentAction,
-        }
-      } : {}),
-    };
-    
-    const stateJson = JSON.stringify(state, null, 2);
-    
-    // Füge Console-Logs hinzu
-    // HINWEIS: Diese Logs sammeln nur client-side Console-Aufrufe (Browser-Console)
-    // Backend-Logs werden nicht erfasst (gehen in Node.js Console)
-    const logsSection = consoleLogs.length > 0 
-      ? `\n\n=== Console Logs (${consoleLogs.length} client-side) ===\n` +
-        consoleLogs.slice(-50).map(log => { // Zeige nur die letzten 50 Logs
-          const time = new Date(log.timestamp).toLocaleTimeString('de-DE');
-          const typePrefix = log.type === 'error' ? '❌' : log.type === 'warn' ? '⚠️' : log.type === 'info' ? 'ℹ️' : '📝';
-          return `[${time}] ${typePrefix} ${log.type.toUpperCase()}: ${log.message}`;
-        }).join('\n')
-      : '\n\n=== Console Logs ===\n(Hinweis: Nur client-side Logs werden erfasst. Backend-Logs sind in der Node.js Console sichtbar.)';
-    
-    return stateJson + logsSection;
-  }, [conversation, consoleLogs]);
-
   // Funktion zum Anzeigen einer vereinfachten Erklärung mit Beispielen
   const handleShowHelpExplanation = useCallback(async (cardId?: string) => {
     if (!cardId) {
@@ -1088,52 +851,6 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onImportExportReady]); // Nur onImportExportReady als Dependency, Handler sind stabil
   
-  // Dev Tool: Markiere alle Karten als gespielt
-  const handleMarkAllCardsPlayed = useCallback(async () => {
-    try {
-      const response = await fetch(`${getApiUrl()}/api/dev/mark-all-cards-played`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ turns: conversation.turns })
-      });
-      
-      if (!response.ok) {
-        // Versuche Error-Message aus Response zu extrahieren
-        let errorMessage = 'Dev Tool fehlgeschlagen';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          if (response.status === 404) {
-            errorMessage = `HTTP 404: Endpoint nicht gefunden. Bitte starten Sie den Backend-Server neu, damit die neuen Endpoints verfügbar sind.`;
-          } else {
-            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-          }
-        }
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      // Aktualisiere Conversation mit den neuen Turns
-      setConversation({
-        ...conversation,
-        turns: data.turns
-      });
-      alert(`✅ ${data.message}`);
-    } catch (err) {
-      console.error('Dev Tool Fehler:', err);
-      let errorMessage = 'Unbekannter Fehler';
-      
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-        errorMessage = `Netzwerkfehler: Backend-Server ist nicht erreichbar. Bitte stellen Sie sicher, dass der Server auf ${getApiUrl()} läuft.`;
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      alert(`Fehler beim Markieren aller Karten:\n\n${errorMessage}\n\nBitte prüfen Sie:\n- Läuft der Backend-Server? (${getApiUrl()})\n- Sind die Karten geladen?`);
-    }
-  }, [conversation, setConversation]);
-
   return (
     <div className="chat-container">
       <div 
@@ -1308,38 +1025,6 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
         </div>
       </form>
 
-        <details 
-          className="panel"
-          onToggle={(e) => {
-            // Wenn das Panel geöffnet wird, flushe sofort alle gepufferten Logs
-            if ((e.currentTarget as HTMLDetailsElement).open && flushLogsRef.current) {
-              flushLogsRef.current();
-            }
-          }}
-        >
-          <summary>Debug (zeigt internen Zustand)</summary>
-          <pre id="debug">{debugState}</pre>
-          <div style={{ marginTop: '16px', padding: '12px', border: '1px solid #ccc', borderRadius: '4px' }}>
-            <h4 style={{ marginTop: 0 }}>Dev Tools</h4>
-            <button
-              type="button"
-              onClick={handleMarkAllCardsPlayed}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              🧪 Alle Karten als gespielt markieren (Test)
-            </button>
-            <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-              Dies markiert alle Karten als gespielt, um den Endgame-Status zu testen.
-            </p>
-          </div>
-        </details>
       </div>
 
       {selectedCard && (
@@ -1385,5 +1070,4 @@ export default function Chat({ onImportExportReady }: ChatProps = {}) {
     </div>
   );
 }
-
 
