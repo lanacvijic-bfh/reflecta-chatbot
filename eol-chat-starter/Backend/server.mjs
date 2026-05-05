@@ -284,6 +284,14 @@ app.use((req, res, next) => {
 
 // OpenAI Konfiguration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
+const OPENAI_PROJECT_ID = process.env.OPENAI_PROJECT_ID;
+
+function maskSecret(value) {
+  if (!value || typeof value !== 'string') return 'nicht gesetzt';
+  if (value.length <= 14) return '<gesetzt, maskiert>';
+  return `${value.slice(0, 7)}...${value.slice(-4)} (${value.length} Zeichen)`;
+}
 
 if (!OPENAI_API_KEY) {
   console.error('❌ Keine OpenAI API Key gefunden!');
@@ -292,8 +300,13 @@ if (!OPENAI_API_KEY) {
 }
 
 console.log('✅ Verwende OpenAI direkt');
+console.log(`🔑 OpenAI API Key: ${maskSecret(OPENAI_API_KEY)}`);
+console.log(`🏢 OpenAI Organization: ${OPENAI_ORG_ID || 'nicht gesetzt'}`);
+console.log(`📁 OpenAI Project: ${OPENAI_PROJECT_ID || 'nicht gesetzt'}`);
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
+  organization: OPENAI_ORG_ID,
+  project: OPENAI_PROJECT_ID,
   maxRetries: 2,
   timeout: 30000
 });
