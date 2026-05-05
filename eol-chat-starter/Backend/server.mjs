@@ -284,14 +284,6 @@ app.use((req, res, next) => {
 
 // OpenAI Konfiguration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
-const OPENAI_PROJECT_ID = process.env.OPENAI_PROJECT_ID;
-
-function maskSecret(value) {
-  if (!value || typeof value !== 'string') return 'nicht gesetzt';
-  if (value.length <= 14) return '<gesetzt, maskiert>';
-  return `${value.slice(0, 7)}...${value.slice(-4)} (${value.length} Zeichen)`;
-}
 
 if (!OPENAI_API_KEY) {
   console.error('❌ Keine OpenAI API Key gefunden!');
@@ -300,13 +292,8 @@ if (!OPENAI_API_KEY) {
 }
 
 console.log('✅ Verwende OpenAI direkt');
-console.log(`🔑 OpenAI API Key: ${maskSecret(OPENAI_API_KEY)}`);
-console.log(`🏢 OpenAI Organization: ${OPENAI_ORG_ID || 'nicht gesetzt'}`);
-console.log(`📁 OpenAI Project: ${OPENAI_PROJECT_ID || 'nicht gesetzt'}`);
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
-  organization: OPENAI_ORG_ID,
-  project: OPENAI_PROJECT_ID,
   maxRetries: 2,
   timeout: 30000
 });
@@ -421,42 +408,6 @@ app.post('/api/plan', async (req, res) => {
         navigation: "",
         propose_action_now: false
       });
-    }
-
-    const lowerLastUserMessage = lastUserMessage.toLowerCase();
-    const userWantsToStart = !activeTopic && (
-      lowerLastUserMessage.includes('bereit') ||
-      lowerLastUserMessage.includes('start') ||
-      lowerLastUserMessage.includes('beginnen') ||
-      lowerLastUserMessage.includes('erstes thema') ||
-      lowerLastUserMessage.includes('erste thema') ||
-      lowerLastUserMessage.includes('erste frage')
-    );
-
-    if (userWantsToStart) {
-      const topicOrder = ['illness_care', 'practical', 'dignity', 'feelings'];
-      const askedCardIdsAtStart = new Set(turns.map((turn) => turn.card_id).filter(Boolean));
-      const firstTopicWithCard = topicOrder.find((topic) =>
-        CARDS.some((card) => card.topic === topic && !askedCardIdsAtStart.has(card.id))
-      );
-      const firstCard = firstTopicWithCard
-        ? CARDS
-            .filter((card) => card.topic === firstTopicWithCard && !askedCardIdsAtStart.has(card.id))
-            .sort((a, b) => (a.order || 0) - (b.order || 0))[0]
-        : null;
-
-      if (firstCard) {
-        console.log(`✅ User ist bereit - starte deterministisch mit Karte ${firstCard.id}`);
-        return res.json({
-          action: "ask_card",
-          utterance: firstCard.prompt,
-          target_topic: firstCard.topic,
-          card_id: firstCard.id,
-          importance: "",
-          navigation: "",
-          propose_action_now: false
-        });
-      }
     }
     
     // Prüfe, ob der User eine Rückfrage stellt oder die Frage nicht versteht
